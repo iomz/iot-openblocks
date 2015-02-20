@@ -27,5 +27,6 @@ node_modules
 # Users Environment Variables
 .lock-wscript
 
-# Config file
-*.config
+# Config
+config.json
+
