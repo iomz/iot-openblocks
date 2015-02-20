@@ -1,0 +1,6 @@
+mac = B4:99:4C:64:16:2E
+host = broker.mqtt-dashboard.com
+port = 1883
+topic = gif-iot
+interval = 100
+
