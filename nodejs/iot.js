@@ -16,13 +16,14 @@ var async = require("async"),
 
 // constants
 var configFile = "/var/local/config.json";
+var pidFile = "/var/local/iot.pid";
 var mosquittoHost = "test.mosquitto.org";
 var mosquittoPort = 1883;
 var defaultTopic = "gif-iot";
 var defaultInterval = 100;
 
 // globals
-var mqttHost, mqttPort, mqttTopic, meterInterval;
+var mqttHost, mqttPort, mqttTopic, mqttInterbal, meterInterval;
 
 // mqttClient
 var mqttClient = null;
@@ -35,7 +36,7 @@ tagData.toJson = function() {
 };
 tagData.publish = function() {
     mqttClient.publish(mqttTopic + "/" + this.macAddress + "/data", tagData.toJson());
-    console.log("[" + mqttTopic + "/" + this.macAddress + "/data] " + tagData.toJson());
+    //console.log("[" + mqttTopic + "/" + this.macAddress + "/data] " + tagData.toJson());
 };
 
 // read the config file
@@ -46,6 +47,7 @@ function readConfig() {
     mqttHost = nconf.get("mqtt:host") || mosquittoHost;
     mqttPort = nconf.get("mqtt:port") || mosquittoPort;
     mqttTopic = nconf.get("mqtt:topic") || defaultTopic;
+    mqttInterval = nconf.get("mqtt:interval") || defaultInterval;
     meterInterval = nconf.get("interval") || defaultInterval;
     if (nconf.get("mac") != undefined) {
         tagData.macAddress = nconf.get("mac").replace(/:/g, "").toLowerCase();
@@ -60,6 +62,7 @@ function saveConfig() {
     nconf.set("mqtt:host", mqttHost);
     nconf.set("mqtt:port", mqttPort);
     nconf.set("mqtt:topic", mqttTopic);
+    nconf.set("mqtt:interval", mqttInterval);
     nconf.set("interval", meterInterval);
     nconf.set("mac", tagData.macAddress.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
     nconf.save(function(err) {
@@ -94,9 +97,31 @@ function toggleRainbowLED() {
     }).unref();
 }
 
+// write PID to file
+function savePID() {
+    fs.writeFile(pidFile, process.pid, function(err) {
+        if (err) console.log(err);
+    });
+}
+
 //*****************************************************************************
 /* node */
 //*****************************************************************************
+
+process.on('exit', function(code) {
+    async.series([
+        function(callback) { // delete PID file
+            fs.unlink(pidFile, function (err) {
+                if (err) throw err;
+            });
+            callback();
+        }, function(callback) { // reset LED
+            toggleRainbowLED();
+            callback();
+        }
+    ]);
+    console.log('*** Exiting with code: ' + code);
+});
 
 readConfig();
 toggleRainbowLED();
@@ -106,7 +131,10 @@ SensorTag.discover(function(sensorTag) {
         process.exit(0);
     });
 	// asynchronous functions in series 
-    async.series([ function(callback) { // stop rainbowLED
+    async.series([ function(callback) { // save pid
+        savePID();
+        callback();
+    }, function(callback) { // stop rainbowLED
         toggleRainbowLED();
         callback();
     }, function(callback) { // connect to the sensor tag
@@ -209,7 +237,7 @@ SensorTag.discover(function(sensorTag) {
         console.log("*** [MQTT] Publish to " + mqttTopic + "/" + tagData.macAddress + "/data");
         setInterval(function(tag) {
             tag.publish();
-        }, 100, tagData);
+        }, mqttInterval, tagData);
     }, function(callback) { // disconnect from the sensor tag
         sensorTag.disconnect(callback);
     } ]);

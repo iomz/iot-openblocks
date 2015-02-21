@@ -1,4 +1,4 @@
-apt-get install -y ntp git cmake libbluetooth-dev
+apt-get install -y ntp git cmake libbluetooth-dev screen
 
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
@@ -18,7 +18,7 @@ fi
 cd /var/local && git clone https://github.com/iomz/iot-openblocks.git
 cd /var/local/iot-openblocks/nodejs && npm install
 cp /var/local/iot-openblocks/script/blue.sh /var/local/
-cp /var/local/iot-openblocks/script/raibow.sh /var/local/
+cp /var/local/iot-openblocks/script/rainbow.sh /var/local/
 cp /var/local/iot-openblocks/script/rc.local /etc/rc.local
 
 reboot
