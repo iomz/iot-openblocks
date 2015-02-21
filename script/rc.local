@@ -15,7 +15,7 @@ mount -t debugfs none /sys/kernel/debug/
 sh /var/local/blue.sh
 rm -f /var/local/*.pid
 sleep 5
-/usr/bin/svscan /service
+/usr/bin/svscan /var/service
 
 exit 0
 

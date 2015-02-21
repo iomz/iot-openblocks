@@ -5,7 +5,7 @@ if [[ "`whoami`" != 'root' ]]; then
 fi
 
 # apt packages
-apt-get install -y ntp git curl cmake libbluetooth-dev screen svtools
+apt-get update && apt-get install -y ntp git curl cmake libbluetooth-dev screen svtools
 
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
@@ -24,16 +24,20 @@ if [ ! -e /usr/local/include/mraa ]; then
 fi
 
 # iot-openblocks
-git clone https://github.com/iomz/iot-openblocks.git ~/iot-openblocks
-cd ~/iot-openblocks/nodejs && npm install
+if [ ! -e ~/iot-openblocks ]; then
+    git clone https://github.com/iomz/iot-openblocks.git ~/iot-openblocks
+    cd ~/iot-openblocks/nodejs && npm install
+fi
 mkdir -p /var/local
-mv /etc/rc.local /etc/rc.local.old
-ln -s $HOME/iot-openblocks/script/rc.local /etc/rc.local
-ln -s $HOME/iot-openblocks/script/blue.sh /var/local/
-ln -s $HOME/iot-openblocks/script/rainbow.sh /var/local/
-ln -s $HOME/iot-openblocks/nodejs /var/local/nodejs
-mkdir -p /service && chmod 755 /service
-ln -s $HOME/iot-openblocks/service/iot /service/iot
+if [ -f /etc/rc.local ]; then
+    mv /etc/rc.local /etc/rc.local.old
+fi
+ln -fs $HOME/iot-openblocks/script/rc.local /etc/rc.local
+ln -fs $HOME/iot-openblocks/script/blue.sh /var/local/
+ln -fs $HOME/iot-openblocks/script/rainbow.sh /var/local/
+ln -fs $HOME/iot-openblocks/nodejs /var/local/nodejs
+mkdir -p /var/service && chmod 755 /var/service
+ln -fs $HOME/iot-openblocks/service/iot /var/service/iot
 
 reboot
 
