@@ -9,6 +9,7 @@
 
 var async = require("async"),
     fs = require("fs"),
+    getmac = require("getmac"),
     mqtt = require("mqtt"),
     nconf = require("nconf"),
     SensorTag = require("sensortag"),
@@ -167,9 +168,13 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) { // save config with new MAC address
         saveConfig();
         if (nconf.get("ip") != undefined) {
-            var ipmac = JSON.stringify({ip: nconf.get("ip"), mac: nconf.get("mac")});
-            mqttClient.publish("gif-iot/ip", ipmac);
-            console.log("[gif-iot/ip] " + ipmac);
+            // get device mac address
+            getmac.getMac(function(err,macAddress){
+                if (err)  throw err;
+                var ipmac = JSON.stringify({ip: nconf.get("ip"), sensor-mac: nconf.get("mac"), device-mac: macAddress.toUpperCase()});
+                mqttClient.publish("gif-iot/ip", ipmac);
+                console.log("[gif-iot/ip] " + ipmac);
+            });
         }
         callback();
     }, function(callback) { // irTemperature

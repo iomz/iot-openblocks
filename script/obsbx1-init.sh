@@ -6,6 +6,8 @@ fi
 
 # apt packages
 apt-get update && apt-get install -y ntp git curl cmake libbluetooth-dev screen svtools
+apt-get install -y swig python-dev
+#apt-get install -y libjavascriptcoregtk-1.0-dev libv8-dev
 
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
