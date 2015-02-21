@@ -108,6 +108,10 @@ function savePID() {
 /* node */
 //*****************************************************************************
 
+process.on('SIGTERM', function () { // gracefull shutdown
+    process.exit(0);
+});
+
 process.on('exit', function(code) {
     async.series([
         function(callback) { // delete PID file
