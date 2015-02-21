@@ -30,3 +30,7 @@ node_modules
 # Config
 config.json
 
+# daemontools
+supervise
+main
+

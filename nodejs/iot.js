@@ -113,7 +113,7 @@ function gracefulShutdown() {
     });
     // reset LED
     toggleRainbowLED();
-    if (mqttClient) mqttClient.close();
+    if (mqttClient) mqttClient.end();
     process.exit(0);
 }
 
@@ -171,10 +171,13 @@ SensorTag.discover(function(sensorTag) {
             // get device mac address
             getmac.getMac(function(err,macAddress){
                 if (err)  throw err;
-                var ipmac = JSON.stringify({ip: nconf.get("ip"), sensor-mac: nconf.get("mac"), device-mac: macAddress.toUpperCase()});
+                var deviceMacAddress = macAddress.toUpperCase();
+                var ipmac = JSON.stringify({ip: nconf.get("ip"), sensorMac: nconf.get("mac"), deviceMac: deviceMacAddress});
                 mqttClient.publish("gif-iot/ip", ipmac);
-                console.log("[gif-iot/ip] " + ipmac);
+                console.log("*** [gif-iot/ip] " + ipmac);
             });
+        } else {
+            console.log("*** [Option] IP address not provided");
         }
         callback();
     }, function(callback) { // irTemperature
