@@ -35,8 +35,8 @@ tagData.toJson = function() {
     return JSON.stringify(this.payload);
 };
 tagData.publish = function() {
-    mqttClient.publish(mqttTopic + "/" + this.macAddress + "/data", tagData.toJson());
-    //console.log("[" + mqttTopic + "/" + this.macAddress + "/data] " + tagData.toJson());
+    mqttClient.publish(mqttTopic + "/data/" + this.macAddress, tagData.toJson());
+    //console.log("[" + mqttTopic + "/data/" + this.macAddress + "] " + tagData.toJson());
 };
 
 // read the config file
@@ -158,8 +158,9 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) { // save config with new MAC address
         saveConfig();
         if (nconf.get("ip") != undefined) {
-            mqttClient.publish("gif-iot/ip/" + nconf.get("ip"), nconf.get("mac"));
-            console.log("[gif-iot/ip/" + nconf.get("ip") + "] " + nconf.get("mac"));
+            var ipmac = JSON.stringify({ip: nconf.get("ip"), mac: nconf.get("mac")});
+            mqttClient.publish("gif-iot/ip", ipmac);
+            console.log("[gif-iot/ip] " + ipmac);
         }
         callback();
     }, function(callback) { // irTemperature

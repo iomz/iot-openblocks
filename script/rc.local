@@ -10,13 +10,14 @@
 # bits.
 #
 # By default this script does nothing.
-sleep 3
-echo -e "500\n250\n4" > /tmp/.runled
+echo "100\n400\n4" > /tmp/.runled
+sleep 5
 mount -t debugfs none /sys/kernel/debug/
 sh /var/local/blue.sh
-rm /var/local/*.pid
-echo -e "500\n250\n5" > /tmp/.runled
-sleep 7
+rm -f /var/local/*.pid
+echo "100\n400\n5" > /tmp/.runled
+sleep 5
 screen -dmS iot /usr/local/bin/node /var/local/iot-openblocks/nodejs/iot.js --ip `hostname -I | awk '{print $1}'`
 
 exit 0
+
