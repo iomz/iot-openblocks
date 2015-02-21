@@ -104,35 +104,40 @@ function savePID() {
     });
 }
 
+// graceful shutdown
+function gracefulShutdown() {
+    // delete PID file
+    fs.unlink(pidFile, function (err) {
+        if (err) throw err;
+    });
+    // reset LED
+    toggleRainbowLED();
+    if (mqttClient) mqttClient.close();
+    process.exit(0);
+}
+
 //*****************************************************************************
 /* node */
 //*****************************************************************************
 
-process.on('SIGTERM', function () { // gracefull shutdown
-    process.exit(0);
+process.on('exit', function(code) {
+    console.log('*** Exiting with code: ' + code);                                          
 });
 
-process.on('exit', function(code) {
-    async.series([
-        function(callback) { // delete PID file
-            fs.unlink(pidFile, function (err) {
-                if (err) throw err;
-            });
-            callback();
-        }, function(callback) { // reset LED
-            toggleRainbowLED();
-            callback();
-        }
-    ]);
-    console.log('*** Exiting with code: ' + code);
-});
+var signals = ['SIGINT', 'SIGTERM', 'SIGQUIT']
+for (i in signals) {
+    process.on(signals[i], function() {
+        console.log('\n'+signals[i]);
+        gracefulShutdown();
+    });
+}
 
 readConfig();
 toggleRainbowLED();
 SensorTag.discover(function(sensorTag) {
     sensorTag.on("disconnect", function() {
         console.log("*** SensorTag disconnected");
-        process.exit(0);
+        gracefulShutdown();
     });
 	// asynchronous functions in series 
     async.series([ function(callback) { // save pid
