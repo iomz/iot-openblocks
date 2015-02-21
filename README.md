@@ -4,21 +4,35 @@ TI CC2541 Sensor Tag and servo control for OpenBlocks Iot BX1
 
 Synopsis
 ========
-Fire up iot-openblocks to HiveMQ
+Fire up iot-openblocks to pub/sub to a MQTT broker
 
 ```sh
 % git clone https://github.com/iomz/iot-openblocks.git
 % cd iot-openblocks/nodejs
-% node index.js
+% node iot.js --ip `hostname -I | awk '{print $1}'`
 ```
 
-Edit device.config if mac address of CC2541 needs to be specified.
+Modify /var/local/config.json if mac address of CC2541 needs to be specified.
+
+```sh
+# config.json
+{
+  "mqtt": {
+    "host": "test.mosquito.org",
+    "port": 1883,
+    "topic": "iot-openblocks",
+    "interval": 1000
+  },
+  "interval": 1000,
+}
+```
 
 OpenBlocks
 ==========
 To enable the bluetooth module:
 
 ```sh
+# blue.sh
 % bluetooth_rfkill_event & 
 % rfkill unblock bluetooth
 % /etc/init.d/bluetooth start 
