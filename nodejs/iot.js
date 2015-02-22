@@ -4,23 +4,20 @@
 // Contributors:
 //  Iori MIZUTANI (iori.mizutani@gmail.com)
 //*****************************************************************************
-
 // Make Intel Edison's BLE module for connecting a Texas Instruments SenstorTag CC2451
-
-var async = require("async"),
-    fs = require("fs"),
-    getmac = require("getmac"),
-    mqtt = require("mqtt"),
-    nconf = require("nconf"),
-    SensorTag = require("sensortag"),
-    spawn = require("child_process").spawn;
+var async = require("async"), fs = require("fs"), getmac = require("getmac"), mqtt = require("mqtt"), nconf = require("nconf"), SensorTag = require("sensortag"), spawn = require("child_process").spawn;
 
 // constants
 var configFile = "/var/local/config.json";
+
 var pidFile = "/var/local/iot.pid";
+
 var mosquittoHost = "test.mosquitto.org";
+
 var mosquittoPort = 1883;
+
 var defaultTopic = "gif-iot";
+
 var defaultInterval = 100;
 
 // globals
@@ -31,13 +28,15 @@ var mqttClient = null;
 
 // tagData object
 var tagData = {};
+
 tagData.payload = {};
+
 tagData.toJson = function() {
     return JSON.stringify(this.payload);
 };
-tagData.publish = function() {
-    mqttClient.publish(mqttTopic + "/data/" + this.macAddress, tagData.toJson());
-    //console.log("[" + mqttTopic + "/data/" + this.macAddress + "] " + tagData.toJson());
+
+tagData.publish = function(mac) {
+    mqttClient.publish(mqttTopic + "/data/" + mac, tagData.toJson());
 };
 
 // read the config file
@@ -108,7 +107,7 @@ function savePID() {
 // graceful shutdown
 function gracefulShutdown() {
     // delete PID file
-    fs.unlink(pidFile, function (err) {
+    fs.unlink(pidFile, function(err) {
         if (err) throw err;
     });
     // reset LED
@@ -120,44 +119,52 @@ function gracefulShutdown() {
 //*****************************************************************************
 /* node */
 //*****************************************************************************
-
-process.on('exit', function(code) {
-    console.log('*** Exiting with code: ' + code);                                          
+process.on("exit", function(code) {
+    console.log("*** Exiting with code: " + code);
 });
 
-var signals = ['SIGINT', 'SIGTERM', 'SIGQUIT']
+var signals = [ "SIGINT", "SIGTERM", "SIGQUIT" ];
+
 for (i in signals) {
     process.on(signals[i], function() {
-        console.log('\n'+signals[i]);
+        console.log("\n" + signals[i]);
         gracefulShutdown();
     });
 }
 
 readConfig();
+
 toggleRainbowLED();
+
 SensorTag.discover(function(sensorTag) {
     sensorTag.on("disconnect", function() {
         console.log("*** SensorTag disconnected");
         gracefulShutdown();
     });
-	// asynchronous functions in series 
-    async.series([ function(callback) { // save pid
+    // asynchronous functions in series 
+    async.series([ function(callback) {
+        // save pid
         savePID();
         callback();
-    }, function(callback) { // stop rainbowLED
+    }, function(callback) {
+        // stop rainbowLED
         toggleRainbowLED();
         callback();
-    }, function(callback) { // connect to the sensor tag
+    }, function(callback) {
+        // connect to the sensor tag
         console.log("*** [SensorTag] connect");
         sensorTag.connect(callback);
-    }, function(callback) { // discover services and characteristics
+    }, function(callback) {
+        // discover services and characteristics
         console.log("*** [SensorTag] discover services and characteristics");
         sensorTag.discoverServicesAndCharacteristics(callback);
-    }, function(callback) { // get and save MAC address of the sensor tag
+    }, function(callback) {
+        // get and save MAC address of the sensor tag
         console.log("*** [SensorTag] get MAC address");
         tagData.macAddress = sensorTag.uuid;
         callback();
-    }, function(callback) { // create MQTT client
+    }, function(callback) {
+        // create MQTT client
         console.log("*** [MQTT] Connect to the mqtt broker: " + mqttHost);
         mqttClient = mqtt.connect({
             port: mqttPort,
@@ -165,14 +172,19 @@ SensorTag.discover(function(sensorTag) {
             keepalive: 1e4
         });
         callback();
-    }, function(callback) { // save config with new MAC address
+    }, function(callback) {
+        // save config with new MAC address
         saveConfig();
         if (nconf.get("ip") != undefined) {
             // get device mac address
-            getmac.getMac(function(err,macAddress){
-                if (err)  throw err;
+            getmac.getMac(function(err, macAddress) {
+                if (err) throw err;
                 var deviceMacAddress = macAddress.toUpperCase();
-                var ipmac = JSON.stringify({ip: nconf.get("ip"), sensorMac: nconf.get("mac"), deviceMac: deviceMacAddress});
+                var ipmac = JSON.stringify({
+                    ip: nconf.get("ip"),
+                    sensorMac: nconf.get("mac"),
+                    deviceMac: deviceMacAddress
+                });
                 mqttClient.publish("gif-iot/ip", ipmac);
                 console.log("*** [gif-iot/ip] " + ipmac);
             });
@@ -180,7 +192,8 @@ SensorTag.discover(function(sensorTag) {
             console.log("*** [Option] IP address not provided");
         }
         callback();
-    }, function(callback) { // irTemperature
+    }, function(callback) {
+        // irTemperature
         console.log("*** [SensorTag] Enabling irTemperature");
         sensorTag.enableIrTemperature(callback);
     }, function(callback) {
@@ -189,7 +202,8 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.ambientTemp = parseFloat(ambientTemperature.toFixed(1));
         });
         sensorTag.notifyIrTemperature(callback);
-    }, function(callback) { // accelerometer
+    }, function(callback) {
+        // accelerometer
         console.log("*** [SensorTag] Enabling accelerometer");
         sensorTag.enableAccelerometer(callback);
     }, function(callback) {
@@ -201,7 +215,8 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.accelZ = parseFloat(z.toFixed(4));
         });
         sensorTag.notifyAccelerometer(callback);
-    }, function(callback) { // humidity
+    }, function(callback) {
+        // humidity
         console.log("*** [SensorTag] Enabling humidity");
         sensorTag.enableHumidity(callback);
     }, function(callback) {
@@ -210,7 +225,8 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.temp = parseFloat(temperature.toFixed(1));
         });
         sensorTag.notifyHumidity(callback);
-    }, function(callback) { // magnetometer
+    }, function(callback) {
+        // magnetometer
         console.log("*** [SensorTag] Enabling magnetometer");
         sensorTag.enableMagnetometer(callback);
     }, function(callback) {
@@ -222,7 +238,8 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.magZ = parseFloat(z.toFixed(1));
         });
         sensorTag.notifyMagnetometer(callback);
-    }, function(callback) { // barometricPressure
+    }, function(callback) {
+        // barometricPressure
         console.log("*** [SensorTag] Enabling barometricPressure");
         sensorTag.enableBarometricPressure(callback);
     }, function(callback) {
@@ -230,7 +247,8 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.pressure = parseFloat(pressure.toFixed(1));
         });
         sensorTag.notifyBarometricPressure(callback);
-    }, function(callback) { // gyroscope
+    }, function(callback) {
+        // gyroscope
         console.log("*** [SensorTag] Enabling gyroscope");
         sensorTag.enableGyroscope(callback);
     }, function(callback) {
@@ -240,24 +258,27 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.gyroZ = parseFloat(z.toFixed(1));
         });
         sensorTag.notifyGyroscope(callback);
-    }, function(callback) { // simleKey
+    }, function(callback) {
+        // simleKey
         sensorTag.on("simpleKeyChange", function(left, right) {
             tagData.payload.left = left;
             tagData.payload.right = right;
         });
         sensorTag.notifySimpleKey(callback);
-    }, function(callback) { // MQTT subscribe to cmd topic
-        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/" + tagData.macAddress + "/cmd");
-        mqttClient.subscribe(mqttTopic + "/" + tagData.macAddress + "/cmd");
+    }, function(callback) {
+        // MQTT subscribe to cmd topic
+        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/" + nconf.get("mac") + "/cmd");
+        mqttClient.subscribe(mqttTopic + "/" + nconf.get("mac") + "/cmd");
         mqttClient.on("message", doCommand);
         callback();
-    }, function(callback) { // MQTT publish sensor data
-        console.log("*** [MQTT] Publish to " + mqttTopic + "/" + tagData.macAddress + "/data");
+    }, function(callback) {
+        // MQTT publish sensor data
+        console.log("*** [MQTT] Publish to " + mqttTopic + "/" + nconf.get("mac") + "/data");
         setInterval(function(tag) {
-            tag.publish();
+            tag.publish(nconf.get("mac"));
         }, mqttInterval, tagData);
-    }, function(callback) { // disconnect from the sensor tag
+    }, function(callback) {
+        // disconnect from the sensor tag
         sensorTag.disconnect(callback);
     } ]);
 }, tagData.macAddress);
-
