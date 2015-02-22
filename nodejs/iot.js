@@ -18,16 +18,18 @@ var mosquittoPort = 1883;
 
 var defaultTopic = "gif-iot";
 
-var defaultInterval = 100;
+var defaultInterval = 1e3;
 
 // globals
-var mqttHost, mqttPort, mqttTopic, mqttInterbal, meterInterval;
+var mqttHost, mqttPort, mqttTopic, mqttInterbal, sensorInterval;
 
 // mqttClient
 var mqttClient = null;
 
 // tagData object
 var tagData = {};
+
+tagData.macAddress = undefined;
 
 tagData.payload = {};
 
@@ -39,6 +41,15 @@ tagData.publish = function(mac) {
     mqttClient.publish(mqttTopic + "/data/" + mac, tagData.toJson());
 };
 
+// device mac address
+var deviceMacAddress = null;
+
+// mac address to discover
+var macAddressToDiscover = undefined;
+
+// pending notifier pid
+var pendingNotifier = null;
+
 // read the config file
 function readConfig() {
     nconf.argv().file({
@@ -48,13 +59,14 @@ function readConfig() {
     mqttPort = nconf.get("mqtt:port") || mosquittoPort;
     mqttTopic = nconf.get("mqtt:topic") || defaultTopic;
     mqttInterval = nconf.get("mqtt:interval") || defaultInterval;
-    meterInterval = nconf.get("interval") || defaultInterval;
-    if (nconf.get("mac") != undefined) {
-        tagData.macAddress = nconf.get("mac").replace(/:/g, "").toLowerCase();
-        console.log("Press the side button on the SensorTag (" + nconf.get("mac") + ") to connect");
-    } else {
-        console.log("Press the side button on the SensorTag to connect");
+    sensorInterval = nconf.get("sensor:interval") || mqttInterval;
+    if (!tagData.macAddress && nconf.get("sensor:macAddress")) {
+        tagData.macAddress = nconf.get("sensor:macAddress");
     }
+    if (tagData.macAddress) {
+        macAddressToDiscover = tagData.macAddress.replace(/:/g, "").toLowerCase();
+    }
+    console.log("Press the side button on the SensorTag (" + tagData.macAddress + ") to connect");
 }
 
 // save the config to disk
@@ -63,13 +75,13 @@ function saveConfig() {
     nconf.set("mqtt:port", mqttPort);
     nconf.set("mqtt:topic", mqttTopic);
     nconf.set("mqtt:interval", mqttInterval);
-    nconf.set("interval", meterInterval);
-    nconf.set("mac", tagData.macAddress.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
+    nconf.set("sensor:interval", sensorInterval);
+    nconf.set("sensor:macAddress", tagData.macAddress.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
     nconf.save(function(err) {
         fs.readFile(configFile, function(err, data) {
             console.dir(JSON.parse(data.toString()));
         });
-        fs.writeFile("/var/local/pairdSensorTag", nconf.get("mac"), function(err) {
+        fs.writeFile("/var/local/SENSOR_TAG", nconf.get("sensor:macAddress"), function(err) {
             if (err) console.log(err);
         });
     });
@@ -112,7 +124,17 @@ function gracefulShutdown() {
     });
     // reset LED
     toggleRainbowLED();
-    if (mqttClient) mqttClient.end();
+    if (mqttClient) {
+        var ipmac = JSON.stringify({
+            ip: nconf.get("ip"),
+            sensorMac: nconf.get("sensor:macAddress"),
+            deviceMac: deviceMacAddress,
+            nodeStatus: "down"
+        });
+        mqttClient.publish("gif-iot/ip", ipmac);
+        console.log("*** [gif-iot/ip] " + ipmac);
+        mqttClient.end();
+    }
     process.exit(0);
 }
 
@@ -132,9 +154,49 @@ for (i in signals) {
     });
 }
 
-readConfig();
-
-toggleRainbowLED();
+async.series([ function(callback) {
+    fs.readFile("/var/local/SENSOR_TAG", "utf8", function(err, data) {
+        // if (err) throw err; // just skip if file not found
+        tagData.macAddress = data;
+    });
+    callback();
+}, function(callback) {
+    readConfig();
+    callback();
+}, function(callback) {
+    // get device mac address
+    getmac.getMac(function(err, macAddress) {
+        if (err) throw err;
+        deviceMacAddress = macAddress.toUpperCase();
+    });
+    callback();
+}, function(callback) {
+    // create MQTT client
+    console.log("*** [MQTT] Connect to the mqtt broker: " + mqttHost);
+    mqttClient = mqtt.connect({
+        port: mqttPort,
+        host: mqttHost,
+        keepalive: 1e4
+    });
+    callback();
+}, function(callback) {
+    if (nconf.get("ip") != undefined) {
+        pendingNotifier = setInterval(function(tag) {
+            var ipmac = JSON.stringify({
+                ip: nconf.get("ip"),
+                sensorMac: nconf.get("sensor:macAddress"),
+                deviceMac: deviceMacAddress,
+                nodeStatus: "pending"
+            });
+            mqttClient.publish("gif-iot/ip", ipmac);
+            console.log("*** [gif-iot/ip] " + ipmac);
+        }, 1e3);
+    }
+    callback();
+}, function(callback) {
+    toggleRainbowLED();
+    callback();
+} ]);
 
 SensorTag.discover(function(sensorTag) {
     sensorTag.on("disconnect", function() {
@@ -146,6 +208,7 @@ SensorTag.discover(function(sensorTag) {
         // save pid
         savePID();
         callback();
+        if (pendingNotifier) clearInterval(pendingNotifier);
     }, function(callback) {
         // stop rainbowLED
         toggleRainbowLED();
@@ -164,30 +227,17 @@ SensorTag.discover(function(sensorTag) {
         tagData.macAddress = sensorTag.uuid;
         callback();
     }, function(callback) {
-        // create MQTT client
-        console.log("*** [MQTT] Connect to the mqtt broker: " + mqttHost);
-        mqttClient = mqtt.connect({
-            port: mqttPort,
-            host: mqttHost,
-            keepalive: 1e4
-        });
-        callback();
-    }, function(callback) {
         // save config with new MAC address
         saveConfig();
         if (nconf.get("ip") != undefined) {
             // get device mac address
-            getmac.getMac(function(err, macAddress) {
-                if (err) throw err;
-                var deviceMacAddress = macAddress.toUpperCase();
-                var ipmac = JSON.stringify({
-                    ip: nconf.get("ip"),
-                    sensorMac: nconf.get("mac"),
-                    deviceMac: deviceMacAddress
-                });
-                mqttClient.publish("gif-iot/ip", ipmac);
-                console.log("*** [gif-iot/ip] " + ipmac);
+            var ipmac = JSON.stringify({
+                ip: nconf.get("ip"),
+                sensorMac: nconf.get("sensor:macAddress"),
+                deviceMac: deviceMacAddress
             });
+            mqttClient.publish("gif-iot/ip", ipmac);
+            console.log("*** [gif-iot/ip] " + ipmac);
         } else {
             console.log("*** [Option] IP address not provided");
         }
@@ -207,7 +257,7 @@ SensorTag.discover(function(sensorTag) {
         console.log("*** [SensorTag] Enabling accelerometer");
         sensorTag.enableAccelerometer(callback);
     }, function(callback) {
-        sensorTag.setAccelerometerPeriod(meterInterval, callback);
+        sensorTag.setAccelerometerPeriod(sensorInterval, callback);
     }, function(callback) {
         sensorTag.on("accelerometerChange", function(x, y, z) {
             tagData.payload.accelX = parseFloat(x.toFixed(4));
@@ -230,7 +280,7 @@ SensorTag.discover(function(sensorTag) {
         console.log("*** [SensorTag] Enabling magnetometer");
         sensorTag.enableMagnetometer(callback);
     }, function(callback) {
-        sensorTag.setMagnetometerPeriod(meterInterval, callback);
+        sensorTag.setMagnetometerPeriod(sensorInterval, callback);
     }, function(callback) {
         sensorTag.on("magnetometerChange", function(x, y, z) {
             tagData.payload.magX = parseFloat(x.toFixed(1));
@@ -267,18 +317,18 @@ SensorTag.discover(function(sensorTag) {
         sensorTag.notifySimpleKey(callback);
     }, function(callback) {
         // MQTT subscribe to cmd topic
-        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/" + nconf.get("mac") + "/cmd");
-        mqttClient.subscribe(mqttTopic + "/" + nconf.get("mac") + "/cmd");
+        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + nconf.get("sensor:macAddress"));
+        mqttClient.subscribe(mqttTopic + "/cmd/" + nconf.get("sensor:macAddress"));
         mqttClient.on("message", doCommand);
         callback();
     }, function(callback) {
         // MQTT publish sensor data
-        console.log("*** [MQTT] Publish to " + mqttTopic + "/" + nconf.get("mac") + "/data");
+        console.log("*** [MQTT] Publish to " + mqttTopic + "/data/" + nconf.get("sensor:macAddress"));
         setInterval(function(tag) {
-            tag.publish(nconf.get("mac"));
+            tag.publish(nconf.get("sensor:macAddress"));
         }, mqttInterval, tagData);
     }, function(callback) {
         // disconnect from the sensor tag
         sensorTag.disconnect(callback);
     } ]);
-}, tagData.macAddress);
+}, macAddressToDiscover);
