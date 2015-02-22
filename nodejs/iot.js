@@ -252,8 +252,8 @@ SensorTag.discover(function(sensorTag) {
     async.series([ function(callback) {
         // save pid
         savePID();
-        callback();
         if (pendingNotifier) clearInterval(pendingNotifier);
+        callback();
     }, function(callback) {
         // stop rainbowLED
         toggleRainbowLED();
