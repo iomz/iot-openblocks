@@ -233,7 +233,7 @@ async.series([ function(callback) {
             });
             mqttClient.publish("gif-iot/ip", ipmac);
             console.log("*** [gif-iot/ip] " + ipmac);
-        }, 1e3);
+        }, 5e3);
     }
     callback();
 }, function(callback) {
