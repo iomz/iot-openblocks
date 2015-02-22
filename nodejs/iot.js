@@ -39,8 +39,37 @@ tagData.toJson = function() {
     return JSON.stringify(this.payload);
 };
 
+tagData.toBluemixJson = function() {
+    return JSON.stringify({
+        d: {
+            myName: undefined,
+            objectTemp: this.payload.objectTemp,
+            ambientTemp: this.payload.ambientTemp,
+            accelX: this.payload.accelX,
+            accelY: this.payload.accelY,
+            accelZ: this.payload.accelZ,
+            humidity: this.payload.humidity,
+            temp: this.payload.temp,
+            magX: this.payload.magX,
+            magY: this.payload.magY,
+            magZ: this.payload.magZ,
+            pressure: this.payload.pressure,
+            gyroX: this.payload.gyroX,
+            gyroY: this.payload.gyroY,
+            gyroZ: this.payload.gyroZ,
+            latitude: 35.621465,
+            longitude: 139.748531
+        }
+    });
+};
+
 tagData.publish = function(sensorMac) {
-    mqttClient.publish(mqttTopic + "/data/" + sensorMac, tagData.toJson());
+    if (bluemix) {
+        bluemixClient.publish("iot-2/evt/sample/fmt/json", tagData.toBluemixJson());
+        console.log(tagData.toBluemixJson());
+    } else {
+        mqttClient.publish(mqttTopic + "/data/" + sensorMac, tagData.toJson());
+    }
 };
 
 // mac address to discover
@@ -49,11 +78,18 @@ var macToDiscover = undefined;
 // pending notifier pid
 var pendingNotifier = null;
 
+// bluemixOption
+var bluemix = false;
+
+// bluemixClient
+var bluemixClient = null;
+
 // read the config file
 function readConfig() {
     nconf.argv().file({
         file: configFile
     });
+    if (nconf.get("bluemix")) bluemix = true;
     mqttHost = nconf.get("mqtt:host") || mosquittoHost;
     mqttPort = nconf.get("mqtt:port") || mosquittoPort;
     mqttTopic = nconf.get("mqtt:topic") || defaultTopic;
@@ -134,6 +170,7 @@ function gracefulShutdown() {
         console.log("*** [gif-iot/ip] " + ipmac);
         mqttClient.end();
     }
+    if (bluemixClient) bluemixClient.end();
     process.exit(0);
 }
 
@@ -172,11 +209,20 @@ async.series([ function(callback) {
 }, function(callback) {
     // create MQTT client
     console.log("*** [MQTT] Connect to the mqtt broker: " + mqttHost);
-    mqttClient = mqtt.connect({
-        port: mqttPort,
-        host: mqttHost,
-        keepalive: 1e4
-    });
+    if (bluemix) {
+        bluemixClient = mqtt.connect({
+            port: "1883",
+            host: "quickstart.messaging.internetofthings.ibmcloud.com",
+            keepalive: 30,
+            clientId: "d:quickstart:iotsample-ti-bbst:" + macToDiscover
+        });
+    } else {
+        mqttClient = mqtt.connect({
+            port: mqttPort,
+            host: mqttHost,
+            keepalive: 30
+        });
+    }
     callback();
 }, function(callback) {
     if (nconf.get("ip") != undefined) {
@@ -187,7 +233,7 @@ async.series([ function(callback) {
                 deviceMac: tagData.payload.deviceMac,
                 nodeStatus: "pending"
             });
-            mqttClient.publish("gif-iot/ip", ipmac);
+            if (!bluemix) mqttClient.publish("gif-iot/ip", ipmac);
             console.log("*** [gif-iot/ip] " + ipmac);
         }, 1e3);
     }
@@ -235,7 +281,7 @@ SensorTag.discover(function(sensorTag) {
                 sensorMac: nconf.get("sensor:mac"),
                 deviceMac: tagData.payload.deviceMac
             });
-            mqttClient.publish("gif-iot/ip", ipmac);
+            if (!bluemix) mqttClient.publish("gif-iot/ip", ipmac);
             console.log("*** [gif-iot/ip] " + ipmac);
         } else {
             console.log("*** [Option] IP address not provided");
@@ -316,9 +362,11 @@ SensorTag.discover(function(sensorTag) {
         sensorTag.notifySimpleKey(callback);
     }, function(callback) {
         // MQTT subscribe to cmd topic
-        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
-        mqttClient.subscribe(mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
-        mqttClient.on("message", doCommand);
+        if (!bluemix) {
+            console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
+            mqttClient.subscribe(mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
+            mqttClient.on("message", doCommand);
+        }
         callback();
     }, function(callback) {
         // MQTT publish sensor data
