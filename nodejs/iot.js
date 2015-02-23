@@ -84,7 +84,7 @@ tagData.publishInfo = function(nodeStatus) {
         nodeStatus: nodeStatus
     });
     mqttClient.publish("gif-iot/ip", info);
-    if(nodeStatus != "pending") console.log("*** [gif-iot/ip] " + info);
+    if (nodeStatus != "pending") console.log("*** [gif-iot/ip] " + info);
 };
 
 // mac address to discover
@@ -121,27 +121,20 @@ function readConfig() {
 }
 
 // save the config to disk
-function saveConfig(ignoreMac) {
+function saveConfig() {
     nconf.set("mqtt:host", mqttHost);
     nconf.set("mqtt:port", mqttPort);
     nconf.set("mqtt:topic", mqttTopic);
     nconf.set("mqtt:interval", mqttInterval);
     nconf.set("sensor:interval", sensorInterval);
-    if (!ignoreMac) {
-        nconf.set("sensor:mac", tagData.payload.sensorMac.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
-    } else {
-        nconf.remove("sensor:mac");
-    }
+    nconf.set("sensor:mac", tagData.payload.sensorMac);
     nconf.save(function(err) {
         fs.readFile(configFile, function(err, data) {
             if (err) console.log(err);
-            //console.dir(JSON.parse(data.toString()));
         });
-        if (!ignoreMac) {
-            fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
-                if (err) console.log(err);
-            });
-        }
+        fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
+            if (err) console.log(err);
+        });
     });
 }
 
@@ -153,7 +146,7 @@ function deleteConfig() {
     fs.unlink(configFile, function(err) {
         if (err) console.log(err);
     });
-    console.log("*** [Config] All the config files deleted"));
+    console.log("*** [Config] All the config files deleted");
 }
 
 // called on message received
@@ -286,7 +279,7 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         // get and save MAC address of the sensor tag
         console.log("*** [SensorTag] get MAC address");
-        tagData.payload.sensorMac = sensorTag.uuid;
+        tagData.payload.sensorMac = sensorTag.uuid.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:");
         callback();
     }, function(callback) {
         // save config with new MAC address
@@ -298,10 +291,10 @@ SensorTag.discover(function(sensorTag) {
         }
         callback();
     }, function(callback) {
-         sensorTag.readSystemId(function(systemId) {
+        sensorTag.readSystemId(function(systemId) {
             tagData.myName += "TI BLE Sensor Tag " + systemId;
             callback();
-         });
+        });
     }, function(callback) {
         // irTemperature
         console.log("*** [SensorTag] Enabling irTemperature");
