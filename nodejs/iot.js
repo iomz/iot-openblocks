@@ -14,7 +14,7 @@ var sensorMacFile = "/var/local/SENSOR_TAG";
 
 var pidFile = "/var/local/iot.pid";
 
-var mosquittoHost = "test.mosquitto.org";
+var mosquittoHost = "lain.sfc.wide.ad.jp";
 
 var mosquittoPort = 1883;
 
@@ -128,10 +128,8 @@ function saveConfig(ignoreMac) {
 // delete config file from the disk
 function deleteConfig() {
     fs.unlink(sensorMacFile, function(err) {
-        if (err) throw err;
     });
     fs.unlink(configFile, function(err) {
-        if (err) throw err;
     });
     saveConfig(true);
 }
