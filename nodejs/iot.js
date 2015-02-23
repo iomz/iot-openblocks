@@ -14,13 +14,17 @@ var rainbowScript = path.join(scriptDir, "rainbow.sh");
 
 var tmpDir = "/tmp";
 
+var brokerFile = path.join(tmpDir, "broker");
+
 var configFile = path.join(tmpDir, "config.json");
 
 var sensorMacFile = path.join(tmpDir, "sensor_mac");
 
 var pidFile = path.join(tmpDir, "iot.pid");
 
-var mqttHost = "broker.mqttdashboard.com";
+var broker = "broker.mqttdashboard.com";
+
+var mqttHost = null;
 
 var mqttPort = 1883;
 
@@ -107,7 +111,7 @@ function readConfig() {
         file: configFile
     });
     if (nconf.get("bluemix")) bluemix = true;
-    mqttHost = nconf.get("mqtt:host") || mqttHost;
+    mqttHost = mqttHost || nconf.get("mqtt:host") || broker;
     mqttPort = nconf.get("mqtt:port") || mqttPort;
     mqttTopic = nconf.get("mqtt:topic") || mqttTopic;
     mqttInterval = nconf.get("mqtt:interval") || mqttInterval;
@@ -131,7 +135,7 @@ function saveConfig() {
     nconf.set("sensor:interval", sensorInterval);
     nconf.set("sensor:mac", tagData.payload.sensorMac);
     nconf.save(function(err) {
-        fs.readFile(configFile, function(err, data) {
+        fs.writeFile(brokerFile, mqttHost, function(err, data) {
             if (err) console.log(err);
         });
         fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
@@ -216,6 +220,10 @@ async.series([ function(callback) {
     fs.readFile(sensorMacFile, "utf8", function(err, data) {
         if (err) console.log(err);
         tagData.payload.sensorMac = data;
+    });
+    fs.readFile(brokerFile, "utf8", function(err, data) {
+        if (err) console.log(err);
+        mqttHost = data;
     });
     callback();
 }, function(callback) {
