@@ -10,6 +10,8 @@ var async = require("async"), fs = require("fs"), getmac = require("getmac"), mq
 // constants
 var configFile = "/var/local/config.json";
 
+var sensorMacFile = "/var/local/SENSOR_TAG";
+
 var pidFile = "/var/local/iot.pid";
 
 var mosquittoHost = "test.mosquitto.org";
@@ -104,21 +106,31 @@ function readConfig() {
 }
 
 // save the config to disk
-function saveConfig() {
+function saveConfig(ignoreMac) {
     nconf.set("mqtt:host", mqttHost);
     nconf.set("mqtt:port", mqttPort);
     nconf.set("mqtt:topic", mqttTopic);
     nconf.set("mqtt:interval", mqttInterval);
     nconf.set("sensor:interval", sensorInterval);
-    nconf.set("sensor:mac", tagData.payload.sensorMac.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
+    if (!ignoreMac) nconf.set("sensor:mac", tagData.payload.sensorMac.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
     nconf.save(function(err) {
         fs.readFile(configFile, function(err, data) {
             console.dir(JSON.parse(data.toString()));
         });
-        fs.writeFile("/var/local/SENSOR_TAG", nconf.get("sensor:mac"), function(err) {
-            if (err) console.log(err);
-        });
+        if (!ignoreMac) {
+            fs.writeFile(sensorMacFile, nconf.get("sensor:mac"), function(err) {
+                if (err) console.log(err);
+            });
+        }
     });
+}
+
+// delete config file from the disk
+function deleteConfig() {
+    fs.unlink(sensorMacFile, function(err) {
+        if (err) throw err;
+    });
+    saveConfig(true);
 }
 
 // called on message received
@@ -190,7 +202,7 @@ for (i in signals) {
 }
 
 async.series([ function(callback) {
-    fs.readFile("/var/local/SENSOR_TAG", "utf8", function(err, data) {
+    fs.readFile(sensorMacFile, "utf8", function(err, data) {
         // if (err) throw err; // just skip if file not found
         tagData.payload.sensorMac = data;
     });
@@ -356,6 +368,7 @@ SensorTag.discover(function(sensorTag) {
         sensorTag.on("simpleKeyChange", function(left, right) {
             tagData.payload.left = left;
             tagData.payload.right = right;
+            if (left && right) deleteConfig();
         });
         sensorTag.notifySimpleKey(callback);
     }, function(callback) {
