@@ -112,7 +112,11 @@ function saveConfig(ignoreMac) {
     nconf.set("mqtt:topic", mqttTopic);
     nconf.set("mqtt:interval", mqttInterval);
     nconf.set("sensor:interval", sensorInterval);
-    if (!ignoreMac) nconf.set("sensor:mac", tagData.payload.sensorMac.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
+    if (!ignoreMac) {
+        nconf.set("sensor:mac", tagData.payload.sensorMac.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:"));
+    } else {
+        nconf.remove("sensor:mac");
+    }
     nconf.save(function(err) {
         fs.readFile(configFile, function(err, data) {
             console.dir(JSON.parse(data.toString()));
