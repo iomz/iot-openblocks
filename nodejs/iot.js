@@ -30,6 +30,8 @@ var mqttInterval = 1e3;
 
 var sensorInterval = 1e3;
 
+var active = false;
+
 // mqttClient
 var mqttClient = null;
 
@@ -40,7 +42,7 @@ tagData.payload = {};
 
 tagData.payload.deviceMac = null;
 
-tagData.payload.sensorMac = undefined;
+tagData.payload.sensorMac = null;
 
 tagData.toJson = function() {
     return JSON.stringify(this.payload);
@@ -187,7 +189,7 @@ function gracefulShutdown() {
     // reset LED
     toggleRainbowLED();
     if (mqttClient) {
-        tagData.publishInfo("down");
+        if (active) tagData.publishInfo("down");
         mqttClient.end();
     }
     if (bluemixClient) bluemixClient.end();
@@ -284,6 +286,7 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         // save config with new MAC address
         saveConfig();
+        active = true;
         if (nconf.get("ip") != undefined) {
             tagData.publishInfo("initialized");
         } else {
