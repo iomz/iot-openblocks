@@ -130,6 +130,9 @@ function deleteConfig() {
     fs.unlink(sensorMacFile, function(err) {
         if (err) throw err;
     });
+    fs.unlink(configFile, function(err) {
+        if (err) throw err;
+    });
     saveConfig(true);
 }
 
