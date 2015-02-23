@@ -131,10 +131,8 @@ function saveConfig(ignoreMac) {
 
 // delete config file from the disk
 function deleteConfig() {
-    fs.unlink(sensorMacFile, function(err) {
-    });
-    fs.unlink(configFile, function(err) {
-    });
+    fs.unlink(sensorMacFile, function(err) {});
+    fs.unlink(configFile, function(err) {});
     saveConfig(true);
 }
 
@@ -176,14 +174,14 @@ function gracefulShutdown() {
     // reset LED
     toggleRainbowLED();
     if (mqttClient) {
-        var ipmac = JSON.stringify({
+        var statusUpdate = JSON.stringify({
             ip: nconf.get("ip"),
             sensorMac: nconf.get("sensor:mac"),
             deviceMac: tagData.payload.deviceMac,
             nodeStatus: "down"
         });
-        mqttClient.publish("gif-iot/ip", ipmac);
-        console.log("*** [gif-iot/ip] " + ipmac);
+        mqttClient.publish("gif-iot/ip", statusUpdate);
+        console.log("*** [gif-iot/ip] " + statusUpdate);
         mqttClient.end();
     }
     if (bluemixClient) bluemixClient.end();
@@ -242,14 +240,14 @@ async.series([ function(callback) {
 }, function(callback) {
     if (nconf.get("ip") != undefined) {
         pendingNotifier = setInterval(function(tag) {
-            var ipmac = JSON.stringify({
+            var statusUpdate = JSON.stringify({
                 ip: nconf.get("ip"),
                 sensorMac: nconf.get("sensor:mac"),
                 deviceMac: tagData.payload.deviceMac,
                 nodeStatus: "pending"
             });
-            mqttClient.publish("gif-iot/ip", ipmac);
-            console.log("*** [gif-iot/ip] " + ipmac);
+            mqttClient.publish("gif-iot/ip", statusUpdate);
+            console.log("*** [gif-iot/ip] " + statusUpdate);
         }, 5e3);
     }
     callback();
@@ -291,13 +289,14 @@ SensorTag.discover(function(sensorTag) {
         saveConfig();
         if (nconf.get("ip") != undefined) {
             // get device mac address
-            var ipmac = JSON.stringify({
+            var statusUpdate = JSON.stringify({
                 ip: nconf.get("ip"),
                 sensorMac: nconf.get("sensor:mac"),
-                deviceMac: tagData.payload.deviceMac
+                deviceMac: tagData.payload.deviceMac,
+                nodeStatus: "initialized"
             });
-            mqttClient.publish("gif-iot/ip", ipmac);
-            console.log("*** [gif-iot/ip] " + ipmac);
+            mqttClient.publish("gif-iot/ip", statusUpdate);
+            console.log("*** [gif-iot/ip] " + statusUpdate);
         } else {
             console.log("*** [Option] IP address not provided");
         }
