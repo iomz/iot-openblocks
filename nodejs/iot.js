@@ -1,29 +1,34 @@
 //*****************************************************************************
 // Copyright (c) 2015 Auto-ID Lab. Japan
+// Make Intel Edison's BLE module for connecting a Texas Instruments SenstorTag CC2451
 //
 // Contributors:
 //  Iori MIZUTANI (iori.mizutani@gmail.com)
 //*****************************************************************************
-// Make Intel Edison's BLE module for connecting a Texas Instruments SenstorTag CC2451
-var async = require("async"), fs = require("fs"), getmac = require("getmac"), mqtt = require("mqtt"), nconf = require("nconf"), SensorTag = require("sensortag"), spawn = require("child_process").spawn;
+var async = require("async"), fs = require("fs"), getmac = require("getmac"), mqtt = require("mqtt"), nconf = require("nconf"), SensorTag = require("sensortag"), spawn = require("child_process").spawn, path = require("path");
 
 // constants
-var configFile = "/var/local/config.json";
+var scriptDir = path.resolve(__dirname, "../script");
 
-var sensorMacFile = "/var/local/SENSOR_TAG";
+var rainbowScript = path.join(scriptDir, "rainbow.sh");
 
-var pidFile = "/var/local/iot.pid";
+var tmpDir = "/tmp";
 
-var mosquittoHost = "lain.sfc.wide.ad.jp";
+var configFile = path.join(tmpDir, "config.json");
 
-var mosquittoPort = 1883;
+var sensorMacFile = path.join(tmpDir, "sensor_mac");
 
-var defaultTopic = "gif-iot";
+var pidFile = path.join(tmpDir, "iot.pid");
 
-var defaultInterval = 1e3;
+var mqttHost = "broker.mqttdashboard.com";
 
-// globals
-var mqttHost, mqttPort, mqttTopic, mqttInterbal, sensorInterval;
+var mqttPort = 1883;
+
+var mqttTopic = "gif-iot";
+
+var mqttInterval = 1e3;
+
+var sensorInterval = 1e3;
 
 // mqttClient
 var mqttClient = null;
@@ -44,7 +49,7 @@ tagData.toJson = function() {
 tagData.toBluemixJson = function() {
     return JSON.stringify({
         d: {
-            myName: undefined,
+            myName: this.myName,
             objectTemp: this.payload.objectTemp,
             ambientTemp: this.payload.ambientTemp,
             accelX: this.payload.accelX,
@@ -58,19 +63,28 @@ tagData.toBluemixJson = function() {
             pressure: this.payload.pressure,
             gyroX: this.payload.gyroX,
             gyroY: this.payload.gyroY,
-            gyroZ: this.payload.gyroZ,
-            latitude: 35.621465,
-            longitude: 139.748531
+            gyroZ: this.payload.gyroZ
         }
     });
 };
 
-tagData.publish = function(sensorMac) {
-    mqttClient.publish(mqttTopic + "/data/" + sensorMac, tagData.toJson());
+tagData.publish = function() {
+    console.log(tagData.toJson());
+    mqttClient.publish(mqttTopic + "/data/" + tagData.payload.sensorMac, tagData.toJson());
     if (bluemix) {
         bluemixClient.publish("iot-2/evt/sample/fmt/json", tagData.toBluemixJson());
-        console.log(tagData.toBluemixJson());
     }
+};
+
+tagData.publishInfo = function(nodeStatus) {
+    var info = JSON.stringify({
+        ip: this.payload.ip,
+        sensorMac: this.payload.sensorMac,
+        deviceMac: this.payload.deviceMac,
+        nodeStatus: nodeStatus
+    });
+    mqttClient.publish("gif-iot/ip", info);
+    if(nodeStatus != "pending") console.log("*** [gif-iot/ip] " + info);
 };
 
 // mac address to discover
@@ -91,11 +105,12 @@ function readConfig() {
         file: configFile
     });
     if (nconf.get("bluemix")) bluemix = true;
-    mqttHost = nconf.get("mqtt:host") || mosquittoHost;
-    mqttPort = nconf.get("mqtt:port") || mosquittoPort;
-    mqttTopic = nconf.get("mqtt:topic") || defaultTopic;
-    mqttInterval = nconf.get("mqtt:interval") || defaultInterval;
-    sensorInterval = nconf.get("sensor:interval") || mqttInterval;
+    mqttHost = nconf.get("mqtt:host") || mqttHost;
+    mqttPort = nconf.get("mqtt:port") || mqttPort;
+    mqttTopic = nconf.get("mqtt:topic") || mqttTopic;
+    mqttInterval = nconf.get("mqtt:interval") || mqttInterval;
+    sensorInterval = nconf.get("sensor:interval") || sensorInterval;
+    tagData.payload.ip = nconf.get("ip");
     if (!tagData.payload.sensorMac && nconf.get("sensor:mac")) {
         tagData.payload.sensorMac = nconf.get("sensor:mac");
     }
@@ -119,10 +134,11 @@ function saveConfig(ignoreMac) {
     }
     nconf.save(function(err) {
         fs.readFile(configFile, function(err, data) {
-            console.dir(JSON.parse(data.toString()));
+            if (err) console.log(err);
+            //console.dir(JSON.parse(data.toString()));
         });
         if (!ignoreMac) {
-            fs.writeFile(sensorMacFile, nconf.get("sensor:mac"), function(err) {
+            fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
                 if (err) console.log(err);
             });
         }
@@ -131,14 +147,18 @@ function saveConfig(ignoreMac) {
 
 // delete config file from the disk
 function deleteConfig() {
-    fs.unlink(sensorMacFile, function(err) {});
-    fs.unlink(configFile, function(err) {});
-    saveConfig(true);
+    fs.unlink(sensorMacFile, function(err) {
+        if (err) console.log(err);
+    });
+    fs.unlink(configFile, function(err) {
+        if (err) console.log(err);
+    });
+    console.log("*** [Config] All the config files deleted"));
 }
 
 // called on message received
 function doCommand(topic, message, packet) {
-    console.log("received command: " + topic + " msg: " + message);
+    console.log("*** [MQTT] Received command: " + topic + " msg: " + message);
     var topics = topic.split("/");
     switch (topics[3]) {
       case "ping":
@@ -152,7 +172,7 @@ function doCommand(topic, message, packet) {
 
 // cycle thru obx1 led color
 function toggleRainbowLED() {
-    spawn("bash", [ "/var/local/rainbow.sh" ], {
+    spawn("/bin/bash", [ rainbowScript ], {
         stdio: "ignore",
         detached: true
     }).unref();
@@ -169,19 +189,12 @@ function savePID() {
 function gracefulShutdown() {
     // delete PID file
     fs.unlink(pidFile, function(err) {
-        if (err) throw err;
+        if (err) console.log(err);
     });
     // reset LED
     toggleRainbowLED();
     if (mqttClient) {
-        var statusUpdate = JSON.stringify({
-            ip: nconf.get("ip"),
-            sensorMac: nconf.get("sensor:mac"),
-            deviceMac: tagData.payload.deviceMac,
-            nodeStatus: "down"
-        });
-        mqttClient.publish("gif-iot/ip", statusUpdate);
-        console.log("*** [gif-iot/ip] " + statusUpdate);
+        tagData.publishInfo("down");
         mqttClient.end();
     }
     if (bluemixClient) bluemixClient.end();
@@ -206,7 +219,7 @@ for (i in signals) {
 
 async.series([ function(callback) {
     fs.readFile(sensorMacFile, "utf8", function(err, data) {
-        // if (err) throw err; // just skip if file not found
+        if (err) console.log(err);
         tagData.payload.sensorMac = data;
     });
     callback();
@@ -216,7 +229,7 @@ async.series([ function(callback) {
 }, function(callback) {
     // get device mac address
     getmac.getMac(function(err, mac) {
-        if (err) throw err;
+        if (err) console.log(err);
         tagData.payload.deviceMac = mac.toUpperCase();
     });
     callback();
@@ -238,18 +251,9 @@ async.series([ function(callback) {
     }
     callback();
 }, function(callback) {
-    if (nconf.get("ip") != undefined) {
-        pendingNotifier = setInterval(function(tag) {
-            var statusUpdate = JSON.stringify({
-                ip: nconf.get("ip"),
-                sensorMac: nconf.get("sensor:mac"),
-                deviceMac: tagData.payload.deviceMac,
-                nodeStatus: "pending"
-            });
-            mqttClient.publish("gif-iot/ip", statusUpdate);
-            console.log("*** [gif-iot/ip] " + statusUpdate);
-        }, 5e3);
-    }
+    pendingNotifier = setInterval(function(tag) {
+        tagData.publishInfo("pending");
+    }, 5e3);
     callback();
 }, function(callback) {
     toggleRainbowLED();
@@ -288,19 +292,16 @@ SensorTag.discover(function(sensorTag) {
         // save config with new MAC address
         saveConfig();
         if (nconf.get("ip") != undefined) {
-            // get device mac address
-            var statusUpdate = JSON.stringify({
-                ip: nconf.get("ip"),
-                sensorMac: nconf.get("sensor:mac"),
-                deviceMac: tagData.payload.deviceMac,
-                nodeStatus: "initialized"
-            });
-            mqttClient.publish("gif-iot/ip", statusUpdate);
-            console.log("*** [gif-iot/ip] " + statusUpdate);
+            tagData.publishInfo("initialized");
         } else {
             console.log("*** [Option] IP address not provided");
         }
         callback();
+    }, function(callback) {
+         sensorTag.readSystemId(function(systemId) {
+            tagData.myName += "TI BLE Sensor Tag " + systemId;
+            callback();
+         });
     }, function(callback) {
         // irTemperature
         console.log("*** [SensorTag] Enabling irTemperature");
@@ -377,15 +378,15 @@ SensorTag.discover(function(sensorTag) {
         sensorTag.notifySimpleKey(callback);
     }, function(callback) {
         // MQTT subscribe to cmd topic
-        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
-        mqttClient.subscribe(mqttTopic + "/cmd/" + nconf.get("sensor:mac"));
+        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + tagData.payload.deviceMac);
+        mqttClient.subscribe(mqttTopic + "/cmd/" + tagData.payload.deviceMac);
         mqttClient.on("message", doCommand);
         callback();
     }, function(callback) {
         // MQTT publish sensor data
-        console.log("*** [MQTT] Publish to " + mqttTopic + "/data/" + nconf.get("sensor:mac"));
+        console.log("*** [MQTT] Publish to " + mqttTopic + "/data/" + tagData.payload.sensorMac);
         setInterval(function(tag) {
-            tag.publish(nconf.get("sensor:mac"));
+            tag.publish();
         }, mqttInterval, tagData);
     }, function(callback) {
         // disconnect from the sensor tag
