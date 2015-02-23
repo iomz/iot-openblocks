@@ -14,7 +14,7 @@ echo "100\n400\n5" > /tmp/.runled
 mount -t debugfs none /sys/kernel/debug/
 sh /root/iot-openblocks/script/blue.sh
 sleep 5
-echo "{\"mqtt\":{\"host\":\"lain.sfc.wide.ad.jp\"}}" > /tmp/config.json
+echo "lain.sfc.wide.ad.jp" > /tmp/broker
 /usr/bin/svscan /var/service &
 
 exit 0
