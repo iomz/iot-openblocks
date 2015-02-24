@@ -5,7 +5,7 @@ if [[ "`whoami`" != 'root' ]]; then
 fi
 
 # apt packages
-apt-get update && apt-get install -y ntp git curl cmake libbluetooth-dev screen svtools python-dev
+apt-get update && apt-get install -y ntpdate git curl libbluetooth-dev svtools python-dev cmake autoconf byacc yodl
 
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
@@ -13,6 +13,16 @@ if [ ! -e /usr/local/bin/node ]; then
     cd ~/node-v0.10.35 && make install
 fi
 mkdir -p ~/tmp && npm config set tmp ~/tmp
+
+# swig
+if [ ! -e ~/swig ]; then
+    cd ~ && git clone https://github.com/swig/swig.git
+    cd swig && ./autogen.sh
+    ./configure
+    make && make install
+fi
+
+# manuall
 
 # mraa
 if [ ! -e /usr/local/include/mraa ]; then
@@ -24,15 +34,11 @@ if [ ! -e /usr/local/include/mraa ]; then
 fi
 
 # iot-openblocks
-if [ ! -e ~/iot-openblocks ]; then
-    git clone https://github.com/iomz/iot-openblocks.git ~/iot-openblocks
+if [ -e ~/iot-openblocks ]; then
     cd ~/iot-openblocks/nodejs && npm install
 fi
 
 # install rc.local
-if [ -f /etc/rc.local ]; then
-    mv /etc/rc.local /etc/rc.local.old
-fi
 ln -fs $HOME/iot-openblocks/script/rc.local /etc/rc.local
 
 mkdir -p /var/service && chmod 755 /var/service
