@@ -22,7 +22,8 @@ var sensorMacFile = path.join(tmpDir, "sensor_mac");
 
 var pidFile = path.join(tmpDir, "iot.pid");
 
-var broker = "broker.mqttdashboard.com";
+//var broker = "broker.mqttdashboard.com";
+var broker = "lain.sfc.wide.ad.jp";
 
 var mqttHost = null;
 
@@ -181,7 +182,7 @@ function doCommand(topic, message, packet) {
 
       case "servo":
         var payload = JSON.parse(message);
-        if (payload.angle && Number.isInteger(payload.angle)) servo.angle = payload.angle;
+        if (payload.angle && isInteger(payload.angle)) servo.angle = payload.angle;
         console.log("*** [Servo] Current Angle: " + servo.angle);
         break;
 
@@ -221,6 +222,11 @@ function gracefulShutdown() {
     process.exit(0);
 }
 
+// check if it is an integer
+function isInteger(nVal) {
+    return typeof nVal === "number" && isFinite(nVal) && nVal > -9007199254740992 && nVal < 9007199254740992 && Math.floor(nVal) === nVal;
+}
+
 //*****************************************************************************
 /* node */
 //*****************************************************************************
@@ -244,7 +250,7 @@ async.series([ function(callback) {
     });
     fs.readFile(brokerFile, "utf8", function(err, data) {
         if (err) console.log(err);
-        mqttHost = data;
+        mqttHost = data || mqttHost;
     });
     callback();
 }, function(callback) {
@@ -295,6 +301,8 @@ async.series([ function(callback) {
                 bot.servo.angle(servo.angle);
             }, servoInterval);
         });
+	Cylon.start();
+	console.log("*** [cylong] Cylon robot started");
     }
     callback();
 } ]);
@@ -419,7 +427,7 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         // MQTT subscribe to cmd topic
         console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + tagData.payload.deviceMac);
-        mqttClient.subscribe(mqttTopic + "/cmd/" + tagData.payload.deviceMac);
+        mqttClient.subscribe(mqttTopic + "/cmd/" + tagData.payload.deviceMac + "/#");
         mqttClient.on("message", doCommand);
         callback();
     }, function(callback) {
