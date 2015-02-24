@@ -31,11 +31,11 @@ var mqttPort = 1883;
 
 var mqttTopic = "gif-iot";
 
-var mqttInterval = 1e3;
+var mqttInterval = 100;
 
-var sensorInterval = 1e3;
+var sensorInterval = 100;
 
-var servoInterval = 100;
+var servoInterval = 10;
 
 var active = false;
 
@@ -78,11 +78,12 @@ tagData.toBluemixJson = function() {
 };
 
 tagData.publish = function() {
-    console.log(tagData.toJson());
     mqttClient.publish(mqttTopic + "/data/" + tagData.payload.sensorMac, tagData.toJson());
-    if (bluemix) {
-        bluemixClient.publish("iot-2/evt/sample/fmt/json", tagData.toBluemixJson());
-    }
+};
+
+tagData.bluemixPublish = function() {
+    console.log(tagData.toJson());
+    bluemixClient.publish("iot-2/evt/sample/fmt/json", tagData.toBluemixJson());
 };
 
 tagData.publishInfo = function(nodeStatus) {
@@ -347,7 +348,7 @@ SensorTag.discover(function(sensorTag) {
         callback();
     }, function(callback) {
         sensorTag.readSystemId(function(systemId) {
-            tagData.myName += "TI BLE Sensor Tag " + systemId;
+            tagData.myName = "TI BLE Sensor Tag " + systemId;
             callback();
         });
     }, function(callback) {
@@ -436,6 +437,11 @@ SensorTag.discover(function(sensorTag) {
         setInterval(function(tag) {
             tag.publish();
         }, mqttInterval, tagData);
+	if (bluemix) {
+            setInterval(function(tag) {
+                tag.bluemixPublish();
+            }, 1e3, tagData);
+        }
     }, function(callback) {
         // disconnect from the sensor tag
         sensorTag.disconnect(callback);
