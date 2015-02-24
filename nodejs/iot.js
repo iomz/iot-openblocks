@@ -299,7 +299,13 @@ async.series([ function(callback) {
             pin: 20
         }).on("ready", function(bot) {
             setInterval(function() {
-                bot.servo.angle(servo.angle);
+                var angle = servo.angle;
+                if (angle > 180) {
+                    angle = 180;
+                } else if (angle < 0) {
+                    angle = 0;
+                }
+                bot.servo.angle(angle);
             }, servoInterval);
         });
 	Cylon.start();
