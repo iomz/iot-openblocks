@@ -5,7 +5,7 @@
 // Contributors:
 //  Iori MIZUTANI (iori.mizutani@gmail.com)
 //*****************************************************************************
-var async = require("async"), fs = require("fs"), getmac = require("getmac"), mqtt = require("mqtt"), nconf = require("nconf"), SensorTag = require("sensortag"), spawn = require("child_process").spawn, path = require("path");
+var async = require("async"), fs = require("fs"), Cylon = require("cylon"), getmac = require("getmac"), mqtt = require("mqtt"), nconf = require("nconf"), SensorTag = require("sensortag"), spawn = require("child_process").spawn, path = require("path");
 
 // constants
 var scriptDir = path.resolve(__dirname, "../script");
@@ -33,6 +33,8 @@ var mqttTopic = "gif-iot";
 var mqttInterval = 1e3;
 
 var sensorInterval = 1e3;
+
+var servoInterval = 100;
 
 var active = false;
 
@@ -93,6 +95,15 @@ tagData.publishInfo = function(nodeStatus) {
     if (nodeStatus != "pending") console.log("*** [gif-iot/ip] " + info);
 };
 
+// servo
+var servo = {};
+
+servo.enabled = false;
+
+servo.pin = 20;
+
+servo.angle = 0;
+
 // mac address to discover
 var macToDiscover = undefined;
 
@@ -111,6 +122,10 @@ function readConfig() {
         file: configFile
     });
     if (nconf.get("bluemix")) bluemix = true;
+    if (nconf.get("servo")) {
+        servo.enabled = true;
+        servo.pin = nconf.get("servo") || servo.pin;
+    }
     mqttHost = mqttHost || nconf.get("mqtt:host") || broker;
     mqttPort = nconf.get("mqtt:port") || mqttPort;
     mqttTopic = nconf.get("mqtt:topic") || mqttTopic;
@@ -162,6 +177,12 @@ function doCommand(topic, message, packet) {
     switch (topics[3]) {
       case "ping":
         var payload = JSON.parse(message);
+        break;
+
+      case "servo":
+        var payload = JSON.parse(message);
+        if (payload.angle && Number.isInteger(payload.angle)) servo.angle = payload.angle;
+        console.log("*** [Servo] Current Angle: " + servo.angle);
         break;
 
       default:
@@ -260,6 +281,20 @@ async.series([ function(callback) {
     callback();
 }, function(callback) {
     toggleRainbowLED();
+    callback();
+}, function(callback) {
+    if (servo.enabled) {
+        Cylon.robot().connection("edison", {
+            adaptor: "intel-iot"
+        }).device("servo", {
+            driver: "servo",
+            pin: 20
+        }).on("ready", function(bot) {
+            setInterval(function() {
+                bot.servo.angle(servo.angle);
+            }, servoInterval);
+        });
+    }
     callback();
 } ]);
 
