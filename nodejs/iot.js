@@ -278,6 +278,7 @@ async.series([ function(callback) {
     pendingNotifier = setInterval(function(tag) {
         tagData.publishInfo("pending");
     }, 5e3);
+    console.log("*** [gif-iot/ip] Waiting for a sensor tag");
     callback();
 }, function(callback) {
     toggleRainbowLED();
