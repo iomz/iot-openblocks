@@ -55,15 +55,20 @@ tagData.toJson = function() {
     return JSON.stringify(this.payload);
 };
 
+tagData.publish = function() {
+    mqttClient.publish(mqttTopic + "/data/" + tagData.payload.sensorMac, tagData.toJson());
+};
+
 tagData.publishInfo = function(nodeStatus) {
+    // TODO: assert IP address in a correct format
     var info = JSON.stringify({
         ip: this.payload.ip,
         sensorMac: this.payload.sensorMac,
         deviceMac: this.payload.deviceMac,
         nodeStatus: nodeStatus
     });
-    mqttClient.publish("gif-iot/ip", info);
-    if (nodeStatus != "pending") console.log("*** [gif-iot/ip] " + info);
+    mqttClient.publish("gif-iot/status", info);
+    if (nodeStatus != "pending") console.log("*** [gif-iot/status] " + info);
 };
 
 // servo
@@ -238,7 +243,7 @@ async.series([ function(callback) {
     pendingNotifier = setInterval(function(tag) {
         tagData.publishInfo("pending");
     }, 5e3);
-    console.log("*** [gif-iot/ip] Waiting for a sensor tag");
+    console.log("*** [gif-iot/status] Waiting for a sensor tag");
     callback();
 }, function(callback) {
     toggleRainbowLED();
@@ -261,8 +266,8 @@ async.series([ function(callback) {
                 bot.servo.angle(angle);
             }, servoInterval);
         });
-	Cylon.start();
-	console.log("*** [cylong] Cylon robot started");
+        Cylon.start();
+        console.log("*** [cylong] Cylon robot started");
     }
     callback();
 } ]);
@@ -274,11 +279,8 @@ SensorTag.discover(function(sensorTag) {
     });
     // asynchronous functions in series 
     async.series([ function(callback) {
-        if (nconf.get("ip") != undefined) {
-            tagData.publishInfo("initializing");
-        } else {
-            console.log("*** [Option] IP address not provided");
-        }
+        console.log("*** [gif-iot/status] Initializing a sensor tag");
+        tagData.publishInfo("initializing");
         callback();
     }, function(callback) {
         // save pid
@@ -386,6 +388,10 @@ SensorTag.discover(function(sensorTag) {
             if (left && right) deleteConfig();
         });
         sensorTag.notifySimpleKey(callback);
+    }, function(callback) {
+        console.log("*** [gif-iot/status] Sensor tag initialization completed");
+        tagData.publishInfo("initialized");
+        callback();
     }, function(callback) {
         // MQTT subscribe to cmd topic
         console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + tagData.payload.deviceMac);
