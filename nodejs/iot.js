@@ -55,37 +55,6 @@ tagData.toJson = function() {
     return JSON.stringify(this.payload);
 };
 
-tagData.toBluemixJson = function() {
-    return JSON.stringify({
-        d: {
-            myName: this.myName,
-            objectTemp: this.payload.objectTemp,
-            ambientTemp: this.payload.ambientTemp,
-            accelX: this.payload.accelX,
-            accelY: this.payload.accelY,
-            accelZ: this.payload.accelZ,
-            humidity: this.payload.humidity,
-            temp: this.payload.temp,
-            magX: this.payload.magX,
-            magY: this.payload.magY,
-            magZ: this.payload.magZ,
-            pressure: this.payload.pressure,
-            gyroX: this.payload.gyroX,
-            gyroY: this.payload.gyroY,
-            gyroZ: this.payload.gyroZ
-        }
-    });
-};
-
-tagData.publish = function() {
-    mqttClient.publish(mqttTopic + "/data/" + tagData.payload.sensorMac, tagData.toJson());
-};
-
-tagData.bluemixPublish = function() {
-    console.log(tagData.toJson());
-    bluemixClient.publish("iot-2/evt/sample/fmt/json", tagData.toBluemixJson());
-};
-
 tagData.publishInfo = function(nodeStatus) {
     var info = JSON.stringify({
         ip: this.payload.ip,
@@ -112,18 +81,11 @@ var macToDiscover = undefined;
 // pending notifier pid
 var pendingNotifier = null;
 
-// bluemixOption
-var bluemix = false;
-
-// bluemixClient
-var bluemixClient = null;
-
 // read the config file
 function readConfig() {
     nconf.argv().file({
         file: configFile
     });
-    if (nconf.get("bluemix")) bluemix = true;
     if (nconf.get("servo")) {
         servo.enabled = true;
         servo.pin = nconf.get("servo") || servo.pin;
@@ -219,7 +181,6 @@ function gracefulShutdown() {
         if (active) tagData.publishInfo("down");
         mqttClient.end();
     }
-    if (bluemixClient) bluemixClient.end();
     process.exit(0);
 }
 
@@ -272,14 +233,6 @@ async.series([ function(callback) {
         host: mqttHost,
         keepalive: 30
     });
-    if (bluemix) {
-        bluemixClient = mqtt.connect({
-            port: "1883",
-            host: "quickstart.messaging.internetofthings.ibmcloud.com",
-            keepalive: 30,
-            clientId: "d:quickstart:iotsample-ti-bbst:" + macToDiscover
-        });
-    }
     callback();
 }, function(callback) {
     pendingNotifier = setInterval(function(tag) {
@@ -321,6 +274,13 @@ SensorTag.discover(function(sensorTag) {
     });
     // asynchronous functions in series 
     async.series([ function(callback) {
+        if (nconf.get("ip") != undefined) {
+            tagData.publishInfo("initializing");
+        } else {
+            console.log("*** [Option] IP address not provided");
+        }
+        callback();
+    }, function(callback) {
         // save pid
         savePID();
         if (pendingNotifier) clearInterval(pendingNotifier);
@@ -346,11 +306,6 @@ SensorTag.discover(function(sensorTag) {
         // save config with new MAC address
         saveConfig();
         active = true;
-        if (nconf.get("ip") != undefined) {
-            tagData.publishInfo("initialized");
-        } else {
-            console.log("*** [Option] IP address not provided");
-        }
         callback();
     }, function(callback) {
         sensorTag.readSystemId(function(systemId) {
@@ -443,11 +398,6 @@ SensorTag.discover(function(sensorTag) {
         setInterval(function(tag) {
             tag.publish();
         }, mqttInterval, tagData);
-	if (bluemix) {
-            setInterval(function(tag) {
-                tag.bluemixPublish();
-            }, 1e3, tagData);
-        }
     }, function(callback) {
         // disconnect from the sensor tag
         sensorTag.disconnect(callback);

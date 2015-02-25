@@ -5,7 +5,7 @@ if [[ "`whoami`" != 'root' ]]; then
 fi
 
 # apt packages
-apt-get update && apt-get install -y ntpdate git curl libbluetooth-dev svtools python-dev cmake autoconf byacc yodl
+apt-get update && apt-get install -y ntpdate git curl libbluetooth-dev svtools python-dev cmake autoconf byacc yodl build-essential automake autotools-dev make libpcre3-dev 
 
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
@@ -22,13 +22,11 @@ if [ ! -e ~/swig ]; then
     make && make install
 fi
 
-# manuall
-
 # mraa
 if [ ! -e /usr/local/include/mraa ]; then
     git clone https://github.com/intel-iot-devkit/mraa.git ~/mraa
     mkdir -p ~/mraa/build && cd $_
-    cmake .. -BUILDSWIGNODE=OFF
+    cmake -DBUILDSWIGNODE=OFF ..
     make && make install
     echo "/usr/local/lib/i386-linux-gnu/" > /etc/ld.so.conf.d/i386-linux-gnu-local.conf && ldconfig
 fi
