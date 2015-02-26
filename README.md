@@ -2,40 +2,48 @@ iot-openblocks
 ==============
 TI CC2541 Sensor Tag and servo control for OpenBlocks Iot BX1
 
+![https://igcdn-photos-h-a.akamaihd.net/hphotos-ak-xaf1/t51.2885-15/11022864_359858134216079_2111023958_n.jpg](https://igcdn-photos-h-a.akamaihd.net/hphotos-ak-xaf1/t51.2885-15/11022864_359858134216079_2111023958_n.jpg)
+
 Synopsis
 ========
 Fire up iot-openblocks to pub/sub to a MQTT broker
 
 ```sh
 % git clone https://github.com/iomz/iot-openblocks.git
-% cd iot-openblocks/nodejs
-% node iot.js --ip `hostname -I | awk '{print $1}'`
+% cd iot-openblocks/nodejs && npm install
+% node iot.js --ip `hostname -I | awk '{print $1}'` --servo
 ```
 
-Modify /var/local/config.json if mac address of CC2541 needs to be specified.
+Modify /tmp/config.json if mac address of CC2541 needs to be specified.
 
-```sh
-# config.json
+```javascript
+// config.json
 {
   "mqtt": {
     "host": "test.mosquito.org",
     "port": 1883,
-    "topic": "iot-openblocks",
-    "interval": 1000
+    "topic": "gif-iot",
+    "interval": 100
   },
-  "interval": 1000,
+  "sensor": {
+    "interval": 100,
+    "mac": "78:A5:04:8C:29:BA"
+  }
 }
 ```
 
 OpenBlocks
 ==========
+Setup openblocks for iot-openblocks
+
+```sh
+% sudo iot-openblocks/script/setup.sh
+```
+
 To enable the bluetooth module:
 
 ```sh
-# blue.sh
-% bluetooth_rfkill_event & 
-% rfkill unblock bluetooth
-% /etc/init.d/bluetooth start 
+% sudo iot-openblocks/script/blue.sh
 ```
 
 To scan BL/BLE devices:
