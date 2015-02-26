@@ -308,7 +308,8 @@ async.series([ function(callback) {
     mqttClient = mqtt.connect({
         host: mqttHost,
         port: mqttPort,
-        keepalive: 30
+        keepalive: 30,
+        clientId: tagData.payload.deviceMac
     });
     if (ibmCloud) {
         console.log("*** [MQTT] Connect to the IBM Internet of Things Foundation broker: quickstart.messaging.internetofthings.ibmcloud.com");
