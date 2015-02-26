@@ -37,8 +37,14 @@ if [ -e ~/iot-openblocks ]; then
 fi
 
 # install rc.local
-ln -fs $HOME/iot-openblocks/script/rc.local /etc/rc.local
+if [ ! -L /etc/rc.local ]; then
+    mv /etc/rc.local /etc/rc.local.bak
+    ln -fs $HOME/iot-openblocks/script/rc.local /etc/rc.local
+fi
 
+# install svtool script
 mkdir -p /var/service && chmod 755 /var/service
-ln -fs $HOME/iot-openblocks/service/iot /var/service/iot
+if [ ! -L /var/service/iot ]; then
+    ln -fs $HOME/iot-openblocks/service/iot /var/service/iot
+fi
 
