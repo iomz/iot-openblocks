@@ -59,6 +59,12 @@ var mqttClient = null;
 // pending notifier pid
 var pendingNotifier = null;
 
+// IBM Internet of Things Foundation option
+var ibmCloud = false;
+
+// mqtt client for IBM Internet of Things Foundation
+var ibmCloudClient = null;
+
 /* mac address to discover
  * unless provided => undefined to connect to any tag discovered */
 var macToDiscover = undefined;
@@ -90,6 +96,29 @@ tagData.publishInfo = function(nodeStatus) {
     });
     mqttClient.publish("gif-iot/status", info);
     if (nodeStatus != "pending") console.log("*** [MQTT:gif-iot/status] " + info);
+};
+
+tagData.publishToIBMCloud = function() {
+    var msg = JSON.stringify({
+        d: {
+            myName: "TI BLE Sensor Tag " + this.systemId,
+            objectTemp: this.payload.objectTemp,
+            ambientTemp: this.payload.ambientTemp,
+            accelX: this.payload.accelX,
+            accelY: this.payload.accelY,
+            accelZ: this.payload.accelZ,
+            humidity: this.payload.humidity,
+            temp: this.payload.temp,
+            magX: this.payload.magX,
+            magY: this.payload.magY,
+            magZ: this.payload.magZ,
+            pressure: this.payload.pressure,
+            gyroX: this.payload.gyroX,
+            gyroY: this.payload.gyroY,
+            gyroZ: this.payload.gyroZ
+        }
+    });
+    ibmCloudClient.publish("iot-2/evt/status/fmt/json", msg);
 };
 
 /* object array to store servo motor info */
@@ -124,11 +153,14 @@ function readConfig() {
     nconf.argv().file({
         file: configFile
     });
+    // enable servo
     if (nconf.get("servo")) {
         for (var i = 0; i < servos.length; i++) {
             servos[i].enabled = true;
         }
     }
+    // enable IBM Internet of Things Foundation with --ibm option
+    if (nconf.get("ibm")) ibmCloud = true;
     mqttHost = mqttHost || nconf.get("mqtt:host") || broker;
     mqttPort = nconf.get("mqtt:port") || mqttPort;
     mqttTopic = nconf.get("mqtt:topic") || mqttTopic;
@@ -223,6 +255,7 @@ function gracefulShutdown() {
         if (configured) tagData.publishInfo("down");
         mqttClient.end();
     }
+    if (ibmCloud) ibmCloudClient.end();
     process.exit(0);
 }
 
@@ -273,10 +306,17 @@ async.series([ function(callback) {
     // create MQTT client
     console.log("*** [MQTT] Connect to the mqtt broker: " + mqttHost);
     mqttClient = mqtt.connect({
-        port: mqttPort,
         host: mqttHost,
+        port: mqttPort,
         keepalive: 30
     });
+    if (ibmCloud) {
+        console.log("*** [MQTT] Connect to the IBM Internet of Things Foundation broker: quickstart.messaging.internetofthings.ibmcloud.com");
+        ibmCloudClient = mqtt.connect({
+            host: "quickstart.messaging.internetofthings.ibmcloud.com",
+            clientId: "d:quickstart:iotsample-ti-bbst:" + macToDiscover
+        });
+    }
     callback();
 }, function(callback) {
     // publish pending status every 5 seconds
@@ -369,6 +409,11 @@ SensorTag.discover(function(sensorTag) {
         // get and save MAC address of the sensor tag
         console.log("*** [SensorTag] get MAC address");
         tagData.payload.sensorMac = sensorTag.uuid.toUpperCase().replace(/(.)(?=(..)+$)/g, "$1:");
+        callback();
+    }, function(callback) {
+        sensorTag.readSystemId(function(systemId) {
+            tagData.systemId = systemId;
+        });
         callback();
     }, function(callback) {
         // save config with new MAC address
@@ -465,6 +510,11 @@ SensorTag.discover(function(sensorTag) {
         setInterval(function(tag) {
             tag.publish();
         }, mqttInterval, tagData);
+        if (ibmCloud) {
+            setInterval(function(tag) {
+                tag.publishToIBMCloud();
+            }, 1e3, tagData);
+        }
     }, function(callback) {
         // disconnect from the sensor tag
         sensorTag.disconnect(callback);
