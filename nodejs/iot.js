@@ -10,39 +10,60 @@ var async = require("async"), fs = require("fs"), Cylon = require("cylon"), getm
 // constants
 var scriptDir = path.resolve(__dirname, "../script");
 
+// blink led like rainbow
 var rainbowScript = path.join(scriptDir, "rainbow.sh");
 
+// tmp directory
 var tmpDir = "/tmp";
 
-var brokerFile = path.join(tmpDir, "broker");
-
+// store configs 
 var configFile = path.join(tmpDir, "config.json");
 
+// store mqtt broker hostname
+var brokerFile = path.join(tmpDir, "broker");
+
+// store paired sensor's mac address
 var sensorMacFile = path.join(tmpDir, "sensor_mac");
 
+// store process pid
 var pidFile = path.join(tmpDir, "iot.pid");
 
+// default broker
 //var broker = "broker.mqttdashboard.com";
 var broker = "lain.sfc.wide.ad.jp";
 
+// mqtt broker host to connect
 var mqttHost = null;
 
+// mqtt broker port to connect
 var mqttPort = 1883;
 
+// mqtt topic for publish and subscription
 var mqttTopic = "gif-iot";
 
+// mqtt publish interval in milliseconds
 var mqttInterval = 100;
 
+// sensor update interval in milliseconds
 var sensorInterval = 100;
 
-var servoInterval = 10;
+// servo control interval in milliseconds
+var servoInterval = 200;
 
-var active = false;
+// if configurations are fully loaded
+var configured = false;
 
-// mqttClient
+// mqtt client
 var mqttClient = null;
 
-// tagData object
+// pending notifier pid
+var pendingNotifier = null;
+
+/* mac address to discover
+ * unless provided => undefined to connect to any tag discovered */
+var macToDiscover = undefined;
+
+/* object to store data from sensor tag */
 var tagData = {};
 
 tagData.payload = {};
@@ -68,23 +89,35 @@ tagData.publishInfo = function(nodeStatus) {
         nodeStatus: nodeStatus
     });
     mqttClient.publish("gif-iot/status", info);
-    if (nodeStatus != "pending") console.log("*** [gif-iot/status] " + info);
+    if (nodeStatus != "pending") console.log("*** [MQTT:gif-iot/status] " + info);
 };
 
-// servo
-var servo = {};
+/* object array to store servo motor info */
+var servos = [];
 
-servo.enabled = false;
+for (var i = 0; i < 4; i++) {
+    servos[i] = {};
+    servos[i].enabled = false;
+    servos[i].angle = 0;
+    switch (i) {
+      // initialize pins
+        case 0:
+        servos[i].pin = 20;
+        break;
 
-servo.pin = 20;
+      case 1:
+        servos[i].pin = 14;
+        break;
 
-servo.angle = 0;
+      case 2:
+        servos[i].pin = 0;
+        break;
 
-// mac address to discover
-var macToDiscover = undefined;
-
-// pending notifier pid
-var pendingNotifier = null;
+      case 3:
+        servos[i].pin = 21;
+        break;
+    }
+}
 
 // read the config file
 function readConfig() {
@@ -92,8 +125,9 @@ function readConfig() {
         file: configFile
     });
     if (nconf.get("servo")) {
-        servo.enabled = true;
-        servo.pin = nconf.get("servo") || servo.pin;
+        for (var i = 0; i < servos.length; i++) {
+            servos[i].enabled = true;
+        }
     }
     mqttHost = mqttHost || nconf.get("mqtt:host") || broker;
     mqttPort = nconf.get("mqtt:port") || mqttPort;
@@ -150,8 +184,11 @@ function doCommand(topic, message, packet) {
 
       case "servo":
         var payload = JSON.parse(message);
-        if (payload.angle && isInteger(payload.angle)) servo.angle = payload.angle;
-        console.log("*** [Servo] Current Angle: " + servo.angle);
+        if (payload.angle && isInteger(payload.angle)) {
+            if (0 <= payload.id && payload.id <= 3) {
+                servos[payload.id].angle = payload.angle;
+            }
+        }
         break;
 
       default:
@@ -183,7 +220,7 @@ function gracefulShutdown() {
     // reset LED
     toggleRainbowLED();
     if (mqttClient) {
-        if (active) tagData.publishInfo("down");
+        if (configured) tagData.publishInfo("down");
         mqttClient.end();
     }
     process.exit(0);
@@ -195,22 +232,23 @@ function isInteger(nVal) {
 }
 
 //*****************************************************************************
-/* node */
+/* main script */
 //*****************************************************************************
-process.on("exit", function(code) {
-    console.log("*** Exiting with code: " + code);
-});
-
-var signals = [ "SIGINT", "SIGTERM", "SIGQUIT" ];
-
-for (i in signals) {
-    process.on(signals[i], function() {
-        console.log("\n" + signals[i]);
-        gracefulShutdown();
-    });
-}
-
 async.series([ function(callback) {
+    // handle exit event
+    process.on("exit", function(code) {
+        console.log("*** [Process] Exiting with code: " + code);
+    });
+    var signals = [ "SIGINT", "SIGTERM", "SIGQUIT" ];
+    for (i in signals) {
+        process.on(signals[i], function() {
+            console.log("\n" + signals[i]);
+            gracefulShutdown();
+        });
+    }
+    callback();
+}, function(callback) {
+    // read sensor mac and mqtt broker host from files first
     fs.readFile(sensorMacFile, "utf8", function(err, data) {
         if (err) console.log(err);
         tagData.payload.sensorMac = data;
@@ -221,6 +259,7 @@ async.series([ function(callback) {
     });
     callback();
 }, function(callback) {
+    // and then read config file
     readConfig();
     callback();
 }, function(callback) {
@@ -240,46 +279,73 @@ async.series([ function(callback) {
     });
     callback();
 }, function(callback) {
+    // publish pending status every 5 seconds
     pendingNotifier = setInterval(function(tag) {
         tagData.publishInfo("pending");
     }, 5e3);
-    console.log("*** [gif-iot/status] Waiting for a sensor tag");
+    console.log("*** [MQTT:gif-iot/status] Waiting for a sensor tag");
     callback();
 }, function(callback) {
+    // start rainbow blinking
     toggleRainbowLED();
     callback();
 }, function(callback) {
-    if (servo.enabled) {
-        Cylon.robot().connection("edison", {
-            adaptor: "intel-iot"
-        }).device("servo", {
-            driver: "servo",
-            pin: 20
-        }).on("ready", function(bot) {
-            setInterval(function() {
-                var angle = servo.angle;
-                if (angle > 180) {
-                    angle = 180;
-                } else if (angle < 0) {
-                    angle = 0;
+    // servo control initialization
+    if (nconf.get("servo")) {
+        Cylon.robot({
+            connections: {
+                edison: {
+                    adaptor: "intel-iot"
                 }
-                bot.servo.angle(angle);
-            }, servoInterval);
-        });
-        Cylon.start();
-        console.log("*** [cylong] Cylon robot started");
+            },
+            devices: {
+                // TODO: more concise way
+                servo0: {
+                    driver: "servo",
+                    pin: servos[0].pin,
+                    connection: "edison"
+                },
+                servo1: {
+                    driver: "servo",
+                    pin: servos[1].pin,
+                    connection: "edison"
+                },
+                servo2: {
+                    driver: "servo",
+                    pin: servos[2].pin,
+                    connection: "edison"
+                },
+                servo3: {
+                    driver: "servo",
+                    pin: servos[3].pin,
+                    connection: "edison"
+                }
+            },
+            work: function(bot) {
+                // TODO: more concise way
+                every(servoInterval, function() {
+                    // do every servoInterval milliseconds
+                    bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                    bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
+                    bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
+                    bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
+                    console.log("*** [Servo] servo0 => " + servos[0].angle + ", servo1 => " + servos[1].angle + ", servo2 => " + servos[2].angle + ", servo3 => " + servos[3].angle);
+                });
+            }
+        }).start();
+        console.log("*** [Cylon] Cylon robot started");
     }
     callback();
 } ]);
 
 SensorTag.discover(function(sensorTag) {
     sensorTag.on("disconnect", function() {
-        console.log("*** SensorTag disconnected");
+        console.log("*** [SensorTag] SensorTag disconnected");
         gracefulShutdown();
     });
-    // asynchronous functions in series 
     async.series([ function(callback) {
-        console.log("*** [gif-iot/status] Initializing a sensor tag");
+        // notify it's initializing sensors
+        console.log("*** [MQTT:gif-iot/status] Initializing a sensor tag");
         tagData.publishInfo("initializing");
         callback();
     }, function(callback) {
@@ -307,13 +373,8 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         // save config with new MAC address
         saveConfig();
-        active = true;
+        configured = true;
         callback();
-    }, function(callback) {
-        sensorTag.readSystemId(function(systemId) {
-            tagData.myName = "TI BLE Sensor Tag " + systemId;
-            callback();
-        });
     }, function(callback) {
         // irTemperature
         console.log("*** [SensorTag] Enabling irTemperature");
@@ -381,7 +442,7 @@ SensorTag.discover(function(sensorTag) {
         });
         sensorTag.notifyGyroscope(callback);
     }, function(callback) {
-        // simleKey
+        // simpleKey
         sensorTag.on("simpleKeyChange", function(left, right) {
             tagData.payload.left = left;
             tagData.payload.right = right;
@@ -389,7 +450,7 @@ SensorTag.discover(function(sensorTag) {
         });
         sensorTag.notifySimpleKey(callback);
     }, function(callback) {
-        console.log("*** [gif-iot/status] Sensor tag initialization completed");
+        console.log("*** [MQTT:gif-iot/status] Sensor tag initialization completed");
         tagData.publishInfo("initialized");
         callback();
     }, function(callback) {
