@@ -16,14 +16,20 @@ var rainbowScript = path.join(scriptDir, "rainbow.sh");
 // tmp directory
 var tmpDir = "/tmp";
 
+// config directory
+var configDir = "/root";
+
 // store configs 
-var configFile = path.join(tmpDir, "config.json");
+var configFile = path.join(configDir, "config.json");
 
 // store mqtt broker hostname
-var brokerFile = path.join(tmpDir, "broker");
+var brokerFile = path.join(configDir, "broker");
 
 // store paired sensor's mac address
-var sensorMacFile = path.join(tmpDir, "sensor_mac");
+var deviceMacFile = path.join(configDir, "device_mac");
+
+// store paired sensor's mac address
+var sensorMacFile = path.join(configDir, "sensor_mac");
 
 // store process pid
 var pidFile = path.join(tmpDir, "iot.pid");
@@ -170,10 +176,12 @@ function readConfig() {
     if (!tagData.payload.sensorMac && nconf.get("sensor:mac")) {
         tagData.payload.sensorMac = nconf.get("sensor:mac");
     }
+    if (!tagData.payload.deviceMac && nconf.get("device:mac")) {
+        tagData.payload.deviceMac = nconf.get("device:mac");
+    }
     if (tagData.payload.sensorMac) {
         macToDiscover = tagData.payload.sensorMac.replace(/:/g, "").toLowerCase();
     }
-    console.log("Press the side button on the SensorTag (" + tagData.payload.sensorMac + ") to connect");
 }
 
 // save the config to disk
@@ -184,11 +192,15 @@ function saveConfig() {
     nconf.set("mqtt:interval", mqttInterval);
     nconf.set("sensor:interval", sensorInterval);
     nconf.set("sensor:mac", tagData.payload.sensorMac);
+    nconf.set("device:mac", tagData.payload.deviceMac);
     nconf.save(function(err) {
         fs.writeFile(brokerFile, mqttHost, function(err, data) {
             if (err) console.log(err);
         });
         fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
+            if (err) console.log(err);
+        });
+        fs.writeFile(deviceMacFile, tagData.payload.deviceMac, function(err) {
             if (err) console.log(err);
         });
     });
@@ -207,7 +219,7 @@ function deleteConfig() {
 
 // called on message received
 function doCommand(topic, message, packet) {
-    console.log("*** [MQTT] Received command: " + topic + " msg: " + message);
+    //console.log("*** [MQTT] Received command: " + topic + " msg: " + message);
     var topics = topic.split("/");
     switch (topics[3]) {
       case "ping":
@@ -281,10 +293,14 @@ async.series([ function(callback) {
     }
     callback();
 }, function(callback) {
-    // read sensor mac and mqtt broker host from files first
+    // read device, sensor mac and mqtt broker host from files first
+    fs.readFile(deviceMacFile, "utf8", function(err, data) {
+        if (err) console.log(err);
+        tagData.payload.deviceMac = data || null;
+    });
     fs.readFile(sensorMacFile, "utf8", function(err, data) {
         if (err) console.log(err);
-        tagData.payload.sensorMac = data;
+        tagData.payload.sensorMac = data || null;
     });
     fs.readFile(brokerFile, "utf8", function(err, data) {
         if (err) console.log(err);
@@ -297,10 +313,12 @@ async.series([ function(callback) {
     callback();
 }, function(callback) {
     // get device mac address
-    getmac.getMac(function(err, mac) {
-        if (err) console.log(err);
-        tagData.payload.deviceMac = mac.toUpperCase();
-    });
+    if (!tagData.payload.deviceMac) {
+        getmac.getMac(function(err, mac) {
+            if (err) console.log(err);
+            tagData.payload.deviceMac = mac.toUpperCase();
+        });
+    }
     callback();
 }, function(callback) {
     // create MQTT client
@@ -335,6 +353,9 @@ async.series([ function(callback) {
     if (nconf.get("servo")) {
         Cylon.robot({
             connections: {
+                mqtt: {
+                    adaptor: "mqtt", host: 'mqtt://lain.sfc.wide.ad.jp:1883'
+                },
                 edison: {
                     adaptor: "intel-iot"
                 }
@@ -365,23 +386,36 @@ async.series([ function(callback) {
                 }
             },
             work: function(bot) {
-                // TODO: more concise way
-                every(servoInterval, function() {
-                    // do every servoInterval milliseconds
-                    bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
-                    /*
-                    bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
-                    bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
-                    bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
-                    */
-                    console.log("*** [Servo] servo0 => " + servos[0].angle + ", servo1 => " + servos[1].angle + ", servo2 => " + servos[2].angle + ", servo3 => " + servos[3].angle);
+                var topic = 'gif-iot/cmd/' + tagData.payload.deviceMac + '/servo';
+                bot.mqtt.subscribe(topic);
+                bot.mqtt.on('message', function (topic, data) {
+                    console.log("### [Cylon:MQTT:Data] " + data);
+                    var payload = JSON.parse(data);
+                    // More concise way
+                    if (payload.angle && isInteger(payload.angle)) {
+                        if (0 <= payload.id && payload.id <= 3) {
+                            if (payload.id == 0) {
+                                servos[0].angle = payload.angle;
+                                bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                            }
+                        }
+                    }
                 });
+                /*
+                bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
+                bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
+                bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
+                console.log("*** [Servo] servo0 => " + servos[0].angle + ", servo1 => " + servos[1].angle + ", servo2 => " + servos[2].angle + ", servo3 => " + servos[3].angle);
+                */
             }
         }).start();
         console.log("*** [Cylon] Cylon robot started");
     }
     callback();
 } ]);
+    
+console.log("Press the side button on the SensorTag (" + tagData.payload.sensorMac + ") to connect");
 
 SensorTag.discover(function(sensorTag) {
     sensorTag.on("disconnect", function() {
@@ -502,12 +536,6 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         console.log("*** [MQTT:gif-iot/status] Sensor tag initialization completed");
         tagData.publishInfo("initialized");
-        callback();
-    }, function(callback) {
-        // MQTT subscribe to cmd topic
-        console.log("*** [MQTT] Subscribe to " + mqttTopic + "/cmd/" + tagData.payload.deviceMac);
-        mqttClient.subscribe(mqttTopic + "/cmd/" + tagData.payload.deviceMac + "/#");
-        mqttClient.on("message", doCommand);
         callback();
     }, function(callback) {
         // MQTT publish sensor data
