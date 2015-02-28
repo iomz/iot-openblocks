@@ -42,13 +42,13 @@ var mqttPort = 1883;
 var mqttTopic = "gif-iot";
 
 // mqtt publish interval in milliseconds
-var mqttInterval = 100;
+var mqttInterval = 1000;
 
 // sensor update interval in milliseconds
-var sensorInterval = 100;
+var sensorInterval = 1000;
 
 // servo control interval in milliseconds
-var servoInterval = 200;
+var servoInterval = 1000;
 
 // if configurations are fully loaded
 var configured = false;
@@ -345,6 +345,7 @@ async.series([ function(callback) {
                     driver: "servo",
                     pin: servos[0].pin,
                     connection: "edison"
+                /*
                 },
                 servo1: {
                     driver: "servo",
@@ -360,6 +361,7 @@ async.series([ function(callback) {
                     driver: "servo",
                     pin: servos[3].pin,
                     connection: "edison"
+                */
                 }
             },
             work: function(bot) {
@@ -367,9 +369,11 @@ async.series([ function(callback) {
                 every(servoInterval, function() {
                     // do every servoInterval milliseconds
                     bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                    /*
                     bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
                     bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
                     bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
+                    */
                     console.log("*** [Servo] servo0 => " + servos[0].angle + ", servo1 => " + servos[1].angle + ", servo2 => " + servos[2].angle + ", servo3 => " + servos[3].angle);
                 });
             }
