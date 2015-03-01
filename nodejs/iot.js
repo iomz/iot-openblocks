@@ -217,29 +217,6 @@ function deleteConfig() {
     console.log("*** [Config] All the config files deleted");
 }
 
-// called on message received
-function doCommand(topic, message, packet) {
-    //console.log("*** [MQTT] Received command: " + topic + " msg: " + message);
-    var topics = topic.split("/");
-    switch (topics[3]) {
-      case "ping":
-        var payload = JSON.parse(message);
-        break;
-
-      case "servo":
-        var payload = JSON.parse(message);
-        if (payload.angle && isInteger(payload.angle)) {
-            if (0 <= payload.id && payload.id <= 3) {
-                servos[payload.id].angle = payload.angle;
-            }
-        }
-        break;
-
-      default:
-        console.log("Unxpected Command: " + topics[3]);
-    }
-}
-
 // cycle thru obx1 led color
 function changeLED(state) {
     spawn("/bin/bash", [ LEDScript, state ], {
@@ -269,11 +246,6 @@ function gracefulShutdown() {
     }
     if (ibmCloud) ibmCloudClient.end();
     process.exit(0);
-}
-
-// check if it is an integer
-function isInteger(nVal) {
-    return typeof nVal === "number" && isFinite(nVal) && nVal > -9007199254740992 && nVal < 9007199254740992 && Math.floor(nVal) === nVal;
 }
 
 //*****************************************************************************
@@ -388,22 +360,19 @@ async.series([ function(callback) {
                     console.log("### [Cylon:MQTT:Data] " + data);
                     var payload = JSON.parse(data);
                     // More concise way
-                    if (payload.angle && isInteger(payload.angle)) {
-                        if (0 <= payload.id && payload.id <= 3) {
-                            if (payload.id == 0) {
-                                servos[0].angle = payload.angle;
-                                bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
-                            }
+                    if (payload.angle) {
+                        //if (0 <= payload.id && payload.id <= 3) {
+                        if (0 == payload.id) {
+                            servos[0].angle = payload.angle;
+                            bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
                         }
+                        //bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                        //bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
+                        //bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
+                        //bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
+                        console.log("*** [Servo] servo0 => " + servos[0].angle);
                     }
                 });
-                /*
-                bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
-                bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
-                bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
-                bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
-                console.log("*** [Servo] servo0 => " + servos[0].angle + ", servo1 => " + servos[1].angle + ", servo2 => " + servos[2].angle + ", servo3 => " + servos[3].angle);
-                */
             }
         }).start();
         console.log("*** [Cylon] Cylon robot started");
