@@ -2,7 +2,7 @@ iot-openblocks
 ==============
 TI CC2541 Sensor Tag and servo control for OpenBlocks Iot BX1
 
-![https://igcdn-photos-h-a.akamaihd.net/hphotos-ak-xaf1/t51.2885-15/11022864_359858134216079_2111023958_n.jpg](https://igcdn-photos-h-a.akamaihd.net/hphotos-ak-xaf1/t51.2885-15/11022864_359858134216079_2111023958_n.jpg)
+![https://raw.githubusercontent.com/iomz/iot-openblocks/master/docs/iot-openblocks.gif](https://raw.githubusercontent.com/iomz/iot-openblocks/master/docs/iot-openblocks.gif)
 
 Synopsis
 ========
