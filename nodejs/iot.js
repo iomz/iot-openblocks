@@ -10,8 +10,8 @@ var async = require("async"), fs = require("fs"), Cylon = require("cylon"), getm
 // constants
 var scriptDir = path.resolve(__dirname, "../script");
 
-// blink led like rainbow
-var rainbowScript = path.join(scriptDir, "rainbow.sh");
+// blink led
+var LEDScript = path.join(scriptDir, "led.sh");
 
 // tmp directory
 var tmpDir = "/tmp";
@@ -62,8 +62,8 @@ var configured = false;
 // mqtt client
 var mqttClient = null;
 
-// pending notifier pid
-var pendingNotifier = null;
+// discovering notifier pid
+var discoveringNotifier = null;
 
 // IBM Internet of Things Foundation option
 var ibmCloud = false;
@@ -101,7 +101,7 @@ tagData.publishInfo = function(nodeStatus) {
         nodeStatus: nodeStatus
     });
     mqttClient.publish("gif-iot/status", info);
-    if (nodeStatus != "pending") console.log("*** [MQTT:gif-iot/status] " + info);
+    if (nodeStatus != "discovering") console.log("*** [MQTT:gif-iot/status] " + info);
 };
 
 tagData.publishToIBMCloud = function() {
@@ -241,8 +241,8 @@ function doCommand(topic, message, packet) {
 }
 
 // cycle thru obx1 led color
-function toggleRainbowLED() {
-    spawn("/bin/bash", [ rainbowScript ], {
+function changeLED(state) {
+    spawn("/bin/bash", [ LEDScript, state ], {
         stdio: "ignore",
         detached: true
     }).unref();
@@ -262,7 +262,7 @@ function gracefulShutdown() {
         if (err) console.log(err);
     });
     // reset LED
-    toggleRainbowLED();
+    changeLED('down');
     if (mqttClient) {
         if (configured) tagData.publishInfo("down");
         mqttClient.end();
@@ -338,15 +338,11 @@ async.series([ function(callback) {
     }
     callback();
 }, function(callback) {
-    // publish pending status every 5 seconds
-    pendingNotifier = setInterval(function(tag) {
-        tagData.publishInfo("pending");
+    // publish discovering status every 5 seconds
+    discoveringNotifier = setInterval(function(tag) {
+        tagData.publishInfo("discovering");
     }, 5e3);
     console.log("*** [MQTT:gif-iot/status] Waiting for a sensor tag");
-    callback();
-}, function(callback) {
-    // start rainbow blinking
-    toggleRainbowLED();
     callback();
 }, function(callback) {
     // servo control initialization
@@ -413,6 +409,10 @@ async.series([ function(callback) {
         console.log("*** [Cylon] Cylon robot started");
     }
     callback();
+}, function(callback) {
+    // start rainbow blinking to indicate discovering
+    changeLED('discovering');
+    callback();
 } ]);
     
 console.log("Press the side button on the SensorTag (" + tagData.payload.sensorMac + ") to connect");
@@ -426,15 +426,12 @@ SensorTag.discover(function(sensorTag) {
         // notify it's initializing sensors
         console.log("*** [MQTT:gif-iot/status] Initializing a sensor tag");
         tagData.publishInfo("initializing");
+        changeLED('initializing');
         callback();
     }, function(callback) {
         // save pid
         savePID();
-        if (pendingNotifier) clearInterval(pendingNotifier);
-        callback();
-    }, function(callback) {
-        // stop rainbowLED
-        toggleRainbowLED();
+        if (discoveringNotifier) clearInterval(discoveringNotifier);
         callback();
     }, function(callback) {
         // connect to the sensor tag
@@ -536,6 +533,7 @@ SensorTag.discover(function(sensorTag) {
     }, function(callback) {
         console.log("*** [MQTT:gif-iot/status] Sensor tag initialization completed");
         tagData.publishInfo("initialized");
+        changeLED('initialized');
         callback();
     }, function(callback) {
         // MQTT publish sensor data
