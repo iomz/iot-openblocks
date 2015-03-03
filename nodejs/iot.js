@@ -17,26 +17,13 @@ var LEDScript = path.join(scriptDir, "led.sh");
 var tmpDir = "/tmp";
 
 // config directory
-var configDir = "/root";
+var configDir = path.resolve(__dirname, "..");
 
 // store configs 
 var configFile = path.join(configDir, "config.json");
 
-// store mqtt broker hostname
-var brokerFile = path.join(configDir, "broker");
-
-// store paired sensor's mac address
-var deviceMacFile = path.join(configDir, "device_mac");
-
-// store paired sensor's mac address
-var sensorMacFile = path.join(configDir, "sensor_mac");
-
-// store process pid
-var pidFile = path.join(tmpDir, "iot.pid");
-
 // default broker
-//var broker = "broker.mqttdashboard.com";
-var broker = "lain.sfc.wide.ad.jp";
+var broker = "test.mosquitto.org";
 
 // mqtt broker host to connect
 var mqttHost = null;
@@ -66,7 +53,7 @@ var mqttClient = null;
 var discoveringNotifier = null;
 
 // IBM Internet of Things Foundation option
-var ibmCloud = false;
+var ibmCloud = true;
 
 // mqtt client for IBM Internet of Things Foundation
 var ibmCloudClient = null;
@@ -166,19 +153,15 @@ function readConfig() {
         }
     }
     // enable IBM Internet of Things Foundation with --ibm option
-    if (nconf.get("ibm")) ibmCloud = true;
+    if (nconf.get("noibm")) ibmCloud = false;
     mqttHost = mqttHost || nconf.get("mqtt:host") || broker;
     mqttPort = nconf.get("mqtt:port") || mqttPort;
     mqttTopic = nconf.get("mqtt:topic") || mqttTopic;
     mqttInterval = nconf.get("mqtt:interval") || mqttInterval;
     sensorInterval = nconf.get("sensor:interval") || sensorInterval;
     tagData.payload.ip = nconf.get("ip");
-    if (!tagData.payload.sensorMac && nconf.get("sensor:mac")) {
-        tagData.payload.sensorMac = nconf.get("sensor:mac");
-    }
-    if (!tagData.payload.deviceMac && nconf.get("device:mac")) {
-        tagData.payload.deviceMac = nconf.get("device:mac");
-    }
+    tagData.payload.sensorMac = nconf.get("sensor:mac");
+    tagData.payload.deviceMac = nconf.get("device:mac");
     if (tagData.payload.sensorMac) {
         macToDiscover = tagData.payload.sensorMac.replace(/:/g, "").toLowerCase();
     }
@@ -193,24 +176,11 @@ function saveConfig() {
     nconf.set("sensor:interval", sensorInterval);
     nconf.set("sensor:mac", tagData.payload.sensorMac);
     nconf.set("device:mac", tagData.payload.deviceMac);
-    nconf.save(function(err) {
-        fs.writeFile(brokerFile, mqttHost, function(err, data) {
-            if (err) console.log(err);
-        });
-        fs.writeFile(sensorMacFile, tagData.payload.sensorMac, function(err) {
-            if (err) console.log(err);
-        });
-        fs.writeFile(deviceMacFile, tagData.payload.deviceMac, function(err) {
-            if (err) console.log(err);
-        });
-    });
+    nconf.save(function(err) {});
 }
 
 // delete config file from the disk
 function deleteConfig() {
-    fs.unlink(sensorMacFile, function(err) {
-        if (err) console.log(err);
-    });
     fs.unlink(configFile, function(err) {
         if (err) console.log(err);
     });
@@ -225,19 +195,8 @@ function changeLED(state) {
     }).unref();
 }
 
-// write PID to file
-function savePID() {
-    fs.writeFile(pidFile, process.pid, function(err) {
-        if (err) console.log(err);
-    });
-}
-
 // graceful shutdown
 function gracefulShutdown() {
-    // delete PID file
-    fs.unlink(pidFile, function(err) {
-        if (err) console.log(err);
-    });
     // reset LED
     changeLED('down');
     if (mqttClient) {
@@ -263,21 +222,6 @@ async.series([ function(callback) {
             gracefulShutdown();
         });
     }
-    callback();
-}, function(callback) {
-    // read device, sensor mac and mqtt broker host from files first
-    fs.readFile(deviceMacFile, "utf8", function(err, data) {
-        if (err) console.log(err);
-        tagData.payload.deviceMac = data || null;
-    });
-    fs.readFile(sensorMacFile, "utf8", function(err, data) {
-        if (err) console.log(err);
-        tagData.payload.sensorMac = data || null;
-    });
-    fs.readFile(brokerFile, "utf8", function(err, data) {
-        if (err) console.log(err);
-        mqttHost = data || mqttHost;
-    });
     callback();
 }, function(callback) {
     // and then read config file
@@ -322,14 +266,13 @@ async.series([ function(callback) {
         Cylon.robot({
             connections: {
                 mqtt: {
-                    adaptor: "mqtt", host: 'mqtt://lain.sfc.wide.ad.jp:1883'
+                    adaptor: "mqtt", host: 'mqtt://' + mqttHost + ':' + mqttPort.toString()
                 },
                 edison: {
                     adaptor: "intel-iot"
                 }
             },
             devices: {
-                // TODO: more concise way
                 servo0: {
                     driver: "servo",
                     pin: servos[0].pin,
@@ -366,7 +309,6 @@ async.series([ function(callback) {
                             servos[0].angle = payload.angle;
                             bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
                         }
-                        //bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
                         //bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
                         //bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
                         //bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
@@ -393,14 +335,10 @@ SensorTag.discover(function(sensorTag) {
     });
     async.series([ function(callback) {
         // notify it's initializing sensors
+        if (discoveringNotifier) clearInterval(discoveringNotifier);
         console.log("*** [MQTT:gif-iot/status] Initializing a sensor tag");
         tagData.publishInfo("initializing");
         changeLED('initializing');
-        callback();
-    }, function(callback) {
-        // save pid
-        savePID();
-        if (discoveringNotifier) clearInterval(discoveringNotifier);
         callback();
     }, function(callback) {
         // connect to the sensor tag
