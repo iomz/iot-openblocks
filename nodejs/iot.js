@@ -141,11 +141,21 @@ for (var i = 0; i < 4; i++) {
     }
 }
 
+// show help
+function showHelp() {
+    console.log("Help!");
+}
+
 // read the config file
 function readConfig() {
     nconf.argv().file({
         file: configFile
     });
+    // help command
+    if (nconf.get("help")) {
+        showHelp();
+        gracefulShutdown();
+    }
     // enable servo
     if (nconf.get("servo")) {
         for (var i = 0; i < servos.length; i++) {
