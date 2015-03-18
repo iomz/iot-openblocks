@@ -39,7 +39,7 @@ fi
 cd $PACKAGE_DIR/nodejs && npm install
 
 # install rc.local
-if [ -L /etc/rc.local ] || [ -f /etc/rc.local ]; then
+if [ ! -L /etc/rc.local ] && [ -f /etc/rc.local ]; then
     mv /etc/rc.local /etc/rc.local.bak
 fi
 ln -fs $PACKAGE_DIR/script/rc.local /etc/rc.local
@@ -50,4 +50,7 @@ chmod +t $PACKAGE_DIR/service/iot
 chmod +x $PACKAGE_DIR/service/iot/run
 chmod +x $PACKAGE_DIR/service/iot/log/run
 ln -fs $PACKAGE_DIR/service/iot /var/service/iot
+
+# install nodejs script
+ln -fs $PACKAGE_DIR/nodejs /var/nodejs
 

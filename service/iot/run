@@ -2,5 +2,5 @@
 exec 2>&1
 exec env - NODE_ENV=production \
 setuidgid root \
-/usr/local/bin/node /root/iot-openblocks/nodejs/iot.js --ip `hostname -I | awk '{print $1}'` --servo
+/usr/local/bin/node /var/nodejs/iot.js --ip `hostname -I | awk '{print $1}'` --servo
 
