@@ -7,6 +7,10 @@ fi
 # apt packages
 apt-get update && apt-get install -y ntpdate git curl libbluetooth-dev svtools python-dev cmake autoconf byacc yodl build-essential automake autotools-dev make libpcre3-dev 
 
+# package path
+SCRIPT=$(readlink -f $0)
+PACKAGE_DIR=$(dirname $(dirname $SCRIPT))
+
 # nodejs
 if [ ! -e /usr/local/bin/node ]; then
     cd ~ && curl http://web.sfc.wide.ad.jp/~iomz/resource/node-v0.10.35-obsbx1-3.10.17-poky-edison.tgz | tar -xz
@@ -32,19 +36,15 @@ if [ ! -e /usr/local/include/mraa ]; then
 fi
 
 # iot-openblocks
-if [ -e ~/iot-openblocks ]; then
-    cd ~/iot-openblocks/nodejs && npm install
-fi
+cd $PACKAGE_DIR/nodejs && npm install
 
 # install rc.local
-if [ ! -L /etc/rc.local ]; then
+if [ -L /etc/rc.local ] || [ -f /etc/rc.local ]; then
     mv /etc/rc.local /etc/rc.local.bak
-    ln -fs $HOME/iot-openblocks/script/rc.local /etc/rc.local
 fi
+ln -fs $PACKAGE_DIR/script/rc.local /etc/rc.local
 
 # install svtool script
 mkdir -p /var/service && chmod 755 /var/service
-if [ ! -L /var/service/iot ]; then
-    ln -fs $HOME/iot-openblocks/service/iot /var/service/iot
-fi
+ln -fs $PACKAGE_DIR/service/iot /var/service/iot
 
