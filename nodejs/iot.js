@@ -143,7 +143,8 @@ for (var i = 0; i < 4; i++) {
 
 // show help
 function showHelp() {
-    console.log("Help!");
+    console.log("Usage: node iot.js");
+    console.log("Options:\n\t--ip <ip address>:IP address of the device to report in MQTT\n\t--servo:Enable servo\n\t--noibm: Do not publish to IBM IoT");
 }
 
 // read the config file
