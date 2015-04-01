@@ -38,10 +38,23 @@ var mqttTopic = "gif-iot";
 var mqttInterval = 1000;
 
 // sensor update interval in milliseconds
-var sensorInterval = 1000;
+var sensorInterval = 4;
 
 // servo control interval in milliseconds
-var servoInterval = 1000;
+var servoInterval = 20;
+
+// Initialize digital filter
+var digitalFilterLength = servoInterval / sensorInterval;
+var xs = [];
+var ys = [];
+
+for (var i = 0; i < digitalFilterLength; i++) {
+    xs.push(0);
+}
+
+for (var i = 0; i < digitalFilterLength; i++) {
+    ys.push(0);
+}
 
 // if configurations are fully loaded
 var configured = false;
@@ -288,12 +301,12 @@ async.series([ function(callback) {
                     driver: "servo",
                     pin: servos[0].pin,
                     connection: "edison"
-                /*
                 },
                 servo1: {
                     driver: "servo",
                     pin: servos[1].pin,
                     connection: "edison"
+                /*
                 },
                 servo2: {
                     driver: "servo",
@@ -308,23 +321,10 @@ async.series([ function(callback) {
                 }
             },
             work: function(bot) {
-                var topic = 'gif-iot/cmd/' + tagData.payload.deviceMac + '/servo';
-                bot.mqtt.subscribe(topic);
-                bot.mqtt.on('message', function (topic, data) {
-                    console.log("### [Cylon:MQTT:Data] " + data);
-                    var payload = JSON.parse(data);
-                    // More concise way
-                    if (payload.angle) {
-                        //if (0 <= payload.id && payload.id <= 3) {
-                        if (0 == payload.id) {
-                            servos[0].angle = payload.angle;
-                            bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
-                        }
-                        //bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
-                        //bot.servo2.angle(bot.servo2.safeAngle(servos[2].angle));
-                        //bot.servo3.angle(bot.servo3.safeAngle(servos[3].angle));
-                        console.log("*** [Servo] servo0 => " + servos[0].angle);
-                    }
+                every(servoInterval, function() {
+                    bot.servo0.angle(bot.servo0.safeAngle(servos[0].angle));
+                    bot.servo1.angle(bot.servo1.safeAngle(servos[1].angle));
+                    console.log("*** [Servo] servo => [" + servos[0].angle + ", " + servos[1].angle + "]");
                 });
             }
         }).start();
@@ -375,16 +375,6 @@ SensorTag.discover(function(sensorTag) {
         configured = true;
         callback();
     }, function(callback) {
-        // irTemperature
-        console.log("*** [SensorTag] Enabling irTemperature");
-        sensorTag.enableIrTemperature(callback);
-    }, function(callback) {
-        sensorTag.on("irTemperatureChange", function(objectTemperature, ambientTemperature) {
-            tagData.payload.objectTemp = parseFloat(objectTemperature.toFixed(1));
-            tagData.payload.ambientTemp = parseFloat(ambientTemperature.toFixed(1));
-        });
-        sensorTag.notifyIrTemperature(callback);
-    }, function(callback) {
         // accelerometer
         console.log("*** [SensorTag] Enabling accelerometer");
         sensorTag.enableAccelerometer(callback);
@@ -395,51 +385,29 @@ SensorTag.discover(function(sensorTag) {
             tagData.payload.accelX = parseFloat(x.toFixed(4));
             tagData.payload.accelY = parseFloat(y.toFixed(4));
             tagData.payload.accelZ = parseFloat(z.toFixed(4));
+            xs.shift();
+            xs.push(x);
+            ys.shift();
+            ys.push(y);
+            var avgX = 0;
+            for (var i = 0; i < xs.length; i++) {
+                avgX += xs[i];
+            }
+            avgX = avgX / xs.length;
+            var avgY = 0;
+            for (var i = 0; i < ys.length; i++) {
+                avgY += ys[i];
+            }
+            avgY = avgY / ys.length;
+            var theta = -Math.asin(avgY);
+            var phi = Math.asin(avgX / Math.cos(theta));
+            // Store angles as integers
+            //servos[0].angle = 180 * (theta/Math.PI) + 90;
+            //servos[1].angle = 180 * (phi/Math.PI) + 90;
+            servos[0].angle = Math.floor(180 * (theta / Math.PI) + 90);
+            servos[1].angle = Math.floor(180 * (phi / Math.PI) + 90);
         });
         sensorTag.notifyAccelerometer(callback);
-    }, function(callback) {
-        // humidity
-        console.log("*** [SensorTag] Enabling humidity");
-        sensorTag.enableHumidity(callback);
-    }, function(callback) {
-        sensorTag.on("humidityChange", function(temperature, humidity) {
-            tagData.payload.humidity = parseFloat(humidity.toFixed(1));
-            tagData.payload.temp = parseFloat(temperature.toFixed(1));
-        });
-        sensorTag.notifyHumidity(callback);
-    }, function(callback) {
-        // magnetometer
-        console.log("*** [SensorTag] Enabling magnetometer");
-        sensorTag.enableMagnetometer(callback);
-    }, function(callback) {
-        sensorTag.setMagnetometerPeriod(sensorInterval, callback);
-    }, function(callback) {
-        sensorTag.on("magnetometerChange", function(x, y, z) {
-            tagData.payload.magX = parseFloat(x.toFixed(1));
-            tagData.payload.magY = parseFloat(y.toFixed(1));
-            tagData.payload.magZ = parseFloat(z.toFixed(1));
-        });
-        sensorTag.notifyMagnetometer(callback);
-    }, function(callback) {
-        // barometricPressure
-        console.log("*** [SensorTag] Enabling barometricPressure");
-        sensorTag.enableBarometricPressure(callback);
-    }, function(callback) {
-        sensorTag.on("barometricPressureChange", function(pressure) {
-            tagData.payload.pressure = parseFloat(pressure.toFixed(1));
-        });
-        sensorTag.notifyBarometricPressure(callback);
-    }, function(callback) {
-        // gyroscope
-        console.log("*** [SensorTag] Enabling gyroscope");
-        sensorTag.enableGyroscope(callback);
-    }, function(callback) {
-        sensorTag.on("gyroscopeChange", function(x, y, z) {
-            tagData.payload.gyroX = parseFloat(x.toFixed(1));
-            tagData.payload.gyroY = parseFloat(y.toFixed(1));
-            tagData.payload.gyroZ = parseFloat(z.toFixed(1));
-        });
-        sensorTag.notifyGyroscope(callback);
     }, function(callback) {
         // simpleKey
         sensorTag.on("simpleKeyChange", function(left, right) {
