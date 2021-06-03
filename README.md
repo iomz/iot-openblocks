@@ -36,6 +36,32 @@ Modify /tmp/config.json if mac address of CC2541 needs to be specified.
   }
 }
 ```
+Example
+=======
+Any MQTT client can consume the sensor data from CC2541. For example, with the MQTT plugin for Node-RED, we can create a simple logic like
+```javascript
+/* Parse a string received as MQTT message to a JSON object */
+let data = JSON.parse(msg.payload);
+
+/* Extract attributes stored in the JSON */
+let accelX = data.accelX;
+let accelY = data.accelY;
+
+/* Compute the Theta and Phi from the acceleration along x/y axis */
+let theta = -1 * Math.asin(accelY);
+let phi = Math.asin(accelX/Math.cos(theta));
+
+/* Compute the angles and translate them from radians to degrees */
+let angleX = 180 * (theta / Math.PI) + 90;
+let angleY = 180 * (phi / Math.PI) + 90;
+
+return {
+  payload: {
+    pwm0: angleX,
+    pwm1: angleY
+  }
+};
+```
 
 OpenBlocks
 ==========
